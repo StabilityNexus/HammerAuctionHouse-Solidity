@@ -1,1 +1,1 @@
-# DollarAuction-Solidity
+# AllPayAuction-Solidity
