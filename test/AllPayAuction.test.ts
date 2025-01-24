@@ -47,8 +47,11 @@ describe("AllPayAuction", function () {
         5 // deadline (5 sec)
       );
 
-      const auction = await allPayAuction.auctions(1);
+      const auction = await allPayAuction.auctions(0);
       expect(auction.auctioneer).to.equal(await auctioneer.getAddress());
+      expect(auction.totalBids).to.equal(0);
+      expect(auction.availableFunds).to.equal(0);
+      expect(auction.tokenIdOrAmount).to.equal(1);
       expect(auction.isActive).to.be.true;
     });
 
@@ -68,8 +71,10 @@ describe("AllPayAuction", function () {
         5
       );
 
-      const auction = await allPayAuction.auctions(1);
+      const auction = await allPayAuction.auctions(0);
       expect(auction.auctionType).to.equal(1);
+      expect(auction.totalBids).to.equal(0);
+      expect(auction.availableFunds).to.equal(0);
       expect(auction.tokenIdOrAmount).to.equal(amount);
     });
   });
@@ -93,23 +98,23 @@ describe("AllPayAuction", function () {
     });
 
     it("should allow valid bids", async function () {
-      await allPayAuction.connect(bidder1).placeBid(1, {
+      await allPayAuction.connect(bidder1).placeBid(0, {
         value: ethers.parseEther("1.1"),
       });
 
-      const auction = await allPayAuction.auctions(1);
+      const auction = await allPayAuction.auctions(0);
       expect(auction.highestBidder).to.equal(await bidder1.getAddress());
       expect(auction.highestBid).to.equal(ethers.parseEther("1.1"));
     });
 
     it("should extend deadline on bid", async function () {
-      const beforeBid = (await allPayAuction.auctions(1)).deadline;
+      const beforeBid = (await allPayAuction.auctions(0)).deadline;
 
-      await allPayAuction.connect(bidder1).placeBid(1, {
+      await allPayAuction.connect(bidder1).placeBid(0, {
         value: ethers.parseEther("1.1"),
       });
 
-      const afterBid = (await allPayAuction.auctions(1)).deadline;
+      const afterBid = (await allPayAuction.auctions(0)).deadline;
       expect(afterBid).to.be.gt(beforeBid);
     });
   });
@@ -129,7 +134,7 @@ describe("AllPayAuction", function () {
         5 // deadline is now directly in seconds
       );
 
-      await allPayAuction.connect(bidder1).placeBid(1, {
+      await allPayAuction.connect(bidder1).placeBid(0, {
         value: ethers.parseEther("1.5"),
       });
 
@@ -141,7 +146,7 @@ describe("AllPayAuction", function () {
         await auctioneer.getAddress()
       );
 
-      await allPayAuction.checkAuctionStatus(1);
+      await allPayAuction.endAuction(0);
 
       const nftOwner = await mockNFT.ownerOf(1);
       expect(nftOwner).to.equal(await bidder1.getAddress());
@@ -170,14 +175,14 @@ describe("AllPayAuction", function () {
           5
         );
 
-      await allPayAuction.connect(bidder1).placeBid(1, {
+      await allPayAuction.connect(bidder1).placeBid(0, {
         value: ethers.parseEther("1.5"),
       });
 
       const balanceBefore = await ethers.provider.getBalance(
         await auctioneer.getAddress()
       );
-      await allPayAuction.connect(auctioneer).withdrawFunds(1);
+      await allPayAuction.connect(auctioneer).withdrawFunds(0);
       const balanceAfter = await ethers.provider.getBalance(
         await auctioneer.getAddress()
       );

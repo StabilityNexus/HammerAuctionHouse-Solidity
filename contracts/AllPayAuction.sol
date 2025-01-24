@@ -27,11 +27,11 @@ contract AllPayAuction is Ownable {
         uint256 minBidDelta;
         uint256 deadlineExtension;
         uint256 totalBids;
+        uint256 availableFunds;
     }
 
     uint256 private auctionCounter;
     mapping(uint256 => Auction) public auctions;
-
     event AuctionCreated(
         uint256 indexed auctionId,
         AuctionType auctionType,
@@ -40,13 +40,11 @@ contract AllPayAuction is Ownable {
         uint256 tokenIdOrAmount,
         uint256 startingBid
     );
-
     event BidPlaced(
         uint256 indexed auctionId,
         address indexed bidder,
         uint256 bidAmount
     );
-
     event AuctionEnded(
         uint256 indexed auctionId,
         address indexed winner,
@@ -99,12 +97,9 @@ contract AllPayAuction is Ownable {
                 tokenIdOrAmount
             );
         }
-
-        auctionCounter++;
         uint256 auctionId = auctionCounter;
-
         auctions[auctionId] = Auction({
-            id: auctionId,
+            id: auctionCounter++,
             auctionType: auctionType,
             auctioneer: msg.sender,
             tokenAddress: tokenAddress,
@@ -116,9 +111,9 @@ contract AllPayAuction is Ownable {
             deadline: block.timestamp + deadline,
             minBidDelta: minBidDelta,
             deadlineExtension: deadlineExtension,
-            totalBids: 0
+            totalBids: 0,
+            availableFunds: 0
         });
-
         emit AuctionCreated(
             auctionId,
             auctionType,
@@ -133,16 +128,16 @@ contract AllPayAuction is Ownable {
         uint256 auctionId
     ) external payable onlyActiveAuction(auctionId) {
         Auction storage auction = auctions[auctionId];
-        uint256 currentHighestBid = auction.highestBid;
 
         require(
-            msg.value >= currentHighestBid + auction.minBidDelta,
+            msg.value >= auction.highestBid + auction.minBidDelta,
             "Bid must be higher than the current highest bid plus minimum delta"
         );
 
         auction.highestBid = msg.value;
         auction.highestBidder = msg.sender;
-        auction.totalBids += msg.value;
+        auction.availableFunds += msg.value;
+        auction.totalBids++;
 
         // Extend the auction deadline
         auction.deadline += auction.deadlineExtension;
@@ -151,7 +146,7 @@ contract AllPayAuction is Ownable {
     }
 
     //if deadline has been reached
-    function checkAuctionStatus(uint256 auctionId) external {
+    function endAuction(uint256 auctionId) external {
         Auction storage auction = auctions[auctionId];
 
         if (auction.isActive && block.timestamp >= auction.deadline) {
@@ -172,7 +167,7 @@ contract AllPayAuction is Ownable {
                 }
 
                 // Transfer all collected bids to the auctioneer
-                payable(auction.auctioneer).transfer(auction.totalBids);
+                payable(auction.auctioneer).transfer(auction.availableFunds);
 
                 emit AuctionEnded(
                     auctionId,
@@ -205,10 +200,10 @@ contract AllPayAuction is Ownable {
             msg.sender == auction.auctioneer,
             "Only auctioneer can withdraw funds"
         );
-        require(auction.totalBids > 0, "No funds to withdraw");
+        require(auction.availableFunds > 0, "No funds to withdraw");
 
-        uint256 withdrawalAmount = auction.totalBids;
-        auction.totalBids = 0; // Reset total bids to prevent re-entrancy
+        uint256 withdrawalAmount = auction.availableFunds;
+        auction.availableFunds = 0; // Reset availableFunds to zero prevent re-entrancy
 
         payable(auction.auctioneer).transfer(withdrawalAmount);
     }
