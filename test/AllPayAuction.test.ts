@@ -52,7 +52,6 @@ describe("AllPayAuction", function () {
       expect(auction.totalBids).to.equal(0);
       expect(auction.availableFunds).to.equal(0);
       expect(auction.tokenIdOrAmount).to.equal(1);
-      expect(auction.isActive).to.be.true;
     });
 
     it("should create a token auction", async function () {

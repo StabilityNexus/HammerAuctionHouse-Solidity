@@ -22,7 +22,6 @@ contract AllPayAuction is Ownable {
         uint256 startingBid;
         uint256 highestBid;
         address highestBidder;
-        bool isActive;
         uint256 deadline;
         uint256 minBidDelta;
         uint256 deadlineExtension;
@@ -52,7 +51,6 @@ contract AllPayAuction is Ownable {
     );
 
     modifier onlyActiveAuction(uint256 auctionId) {
-        require(auctions[auctionId].isActive, "Auction is not active");
         require(
             block.timestamp < auctions[auctionId].deadline,
             "Auction has expired"
@@ -107,7 +105,6 @@ contract AllPayAuction is Ownable {
             startingBid: startingBid,
             highestBid: 0,
             highestBidder: address(0),
-            isActive: true,
             deadline: block.timestamp + deadline,
             minBidDelta: minBidDelta,
             deadlineExtension: deadlineExtension,
@@ -149,9 +146,7 @@ contract AllPayAuction is Ownable {
     function endAuction(uint256 auctionId) external {
         Auction storage auction = auctions[auctionId];
 
-        if (auction.isActive && block.timestamp >= auction.deadline) {
-            auction.isActive = false;
-
+        if (block.timestamp >= auction.deadline) {
             if (auction.highestBidder != address(0)) {
                 if (auction.auctionType == AuctionType.NFT) {
                     IERC721(auction.tokenAddress).safeTransferFrom(
