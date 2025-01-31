@@ -34,33 +34,54 @@ describe("AllPayAuction", function () {
   });
 
   describe("Auction Creation", function () {
-    it("should create an NFT auction", async function () {
+    it("should create an NFT auction with metadata", async function () {
       await mockNFT.connect(auctioneer).approve(allPayAuction.getAddress(), 1);
 
+      const metadata = {
+        name: "Rare NFT Auction",
+        description: "A very rare NFT up for auction",
+        imageUrl: "https://example.com/nft.jpg",
+      };
+
       const tx = await allPayAuction.connect(auctioneer).createAuction(
+        metadata.name,
+        metadata.description,
+        metadata.imageUrl,
         0, // NFT type
         mockNFT.getAddress(),
         1, // tokenId
         ethers.parseEther("1"), // startingBid
         ethers.parseEther("0.1"), // minBidDelta
-        10, // deadlineExtension (10 sec)
-        5 // deadline (5 sec)
+        10, // deadlineExtension
+        5 // deadline
       );
 
       const auction = await allPayAuction.auctions(0);
+      expect(auction.name).to.equal(metadata.name);
+      expect(auction.description).to.equal(metadata.description);
+      expect(auction.imageUrl).to.equal(metadata.imageUrl);
       expect(auction.auctioneer).to.equal(await auctioneer.getAddress());
       expect(auction.totalBids).to.equal(0);
       expect(auction.availableFunds).to.equal(0);
       expect(auction.tokenIdOrAmount).to.equal(1);
     });
 
-    it("should create a token auction", async function () {
+    it("should create a token auction with metadata", async function () {
       const amount = ethers.parseEther("10");
       await mockToken
         .connect(auctioneer)
         .approve(allPayAuction.getAddress(), amount);
 
+      const metadata = {
+        name: "Token Sale",
+        description: "Bulk token auction",
+        imageUrl: "https://example.com/token.jpg",
+      };
+
       await allPayAuction.connect(auctioneer).createAuction(
+        metadata.name,
+        metadata.description,
+        metadata.imageUrl,
         1, // Token type
         mockToken.getAddress(),
         amount,
@@ -71,10 +92,32 @@ describe("AllPayAuction", function () {
       );
 
       const auction = await allPayAuction.auctions(0);
+      expect(auction.name).to.equal(metadata.name);
+      expect(auction.description).to.equal(metadata.description);
+      expect(auction.imageUrl).to.equal(metadata.imageUrl);
       expect(auction.auctionType).to.equal(1);
       expect(auction.totalBids).to.equal(0);
       expect(auction.availableFunds).to.equal(0);
       expect(auction.tokenIdOrAmount).to.equal(amount);
+    });
+
+    it("should reject auction creation with empty name", async function () {
+      await mockNFT.connect(auctioneer).approve(allPayAuction.getAddress(), 1);
+
+      await expect(
+        allPayAuction.connect(auctioneer).createAuction(
+          "", // empty name
+          "description",
+          "https://example.com/image.jpg",
+          0,
+          mockNFT.getAddress(),
+          1,
+          ethers.parseEther("1"),
+          ethers.parseEther("0.1"),
+          10,
+          5
+        )
+      ).to.be.revertedWith("Name cannot be empty");
     });
   });
 
@@ -86,6 +129,9 @@ describe("AllPayAuction", function () {
       await allPayAuction
         .connect(auctioneer)
         .createAuction(
+          "Test Auction",
+          "Test Description",
+          "https://example.com/test.jpg",
           0,
           await mockNFT.getAddress(),
           1,
@@ -124,6 +170,9 @@ describe("AllPayAuction", function () {
         .connect(auctioneer)
         .approve(await allPayAuction.getAddress(), 1);
       await allPayAuction.connect(auctioneer).createAuction(
+        "Test Auction",
+        "Test Description",
+        "https://example.com/test.jpg",
         0,
         await mockNFT.getAddress(),
         1,
@@ -165,6 +214,9 @@ describe("AllPayAuction", function () {
       await allPayAuction
         .connect(auctioneer)
         .createAuction(
+          "Test Auction",
+          "Test Description",
+          "https://example.com/test.jpg",
           0,
           mockNFT.getAddress(),
           1,
