@@ -15,6 +15,9 @@ contract AllPayAuction is Ownable {
 
     struct Auction {
         uint256 id;
+        string name;
+        string description;
+        string imageUrl;
         AuctionType auctionType;
         address auctioneer;
         address tokenAddress;
@@ -33,6 +36,9 @@ contract AllPayAuction is Ownable {
     mapping(uint256 => Auction) public auctions;
     event AuctionCreated(
         uint256 indexed auctionId,
+        string name,
+        string description,
+        string imageUrl,
         AuctionType auctionType,
         address indexed auctioneer,
         address tokenAddress,
@@ -59,6 +65,9 @@ contract AllPayAuction is Ownable {
     }
 
     function createAuction(
+        string memory name,
+        string memory description,
+        string memory imageUrl,
         AuctionType auctionType,
         address tokenAddress,
         uint256 tokenIdOrAmount,
@@ -67,6 +76,7 @@ contract AllPayAuction is Ownable {
         uint256 deadlineExtension,
         uint256 deadline
     ) external {
+        require(bytes(name).length > 0, "Name cannot be empty");
         require(startingBid > 0, "Starting bid must be greater than 0");
         require(minBidDelta > 0, "Minimum bid delta must be greater than 0");
         require(
@@ -98,6 +108,9 @@ contract AllPayAuction is Ownable {
         uint256 auctionId = auctionCounter;
         auctions[auctionId] = Auction({
             id: auctionCounter++,
+            name: name,
+            description: description,
+            imageUrl: imageUrl,
             auctionType: auctionType,
             auctioneer: msg.sender,
             tokenAddress: tokenAddress,
@@ -113,6 +126,9 @@ contract AllPayAuction is Ownable {
         });
         emit AuctionCreated(
             auctionId,
+            name,
+            description,
+            imageUrl,
             auctionType,
             msg.sender,
             tokenAddress,
