@@ -190,6 +190,8 @@ contract AllPayAuction is Ownable {
             );
         }
 
+        auction.tokenIdOrAmount = 0;
+
         emit AuctionEnded(auctionId, auction.highestBidder, auction.highestBid);
     }
 
