@@ -18,7 +18,7 @@ const config: HardhatUserConfig = {
       chainId: 31337,
     },
     holesky: {
-      url: "https://rpc.holesky.ethpandaops.io",
+      url: "https://rpc.ankr.com/eth_holesky",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
   },
