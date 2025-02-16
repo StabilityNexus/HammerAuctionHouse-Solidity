@@ -52,10 +52,15 @@ contract AllPayAuction is Ownable {
         address indexed bidder,
         uint256 bidAmount
     );
-    event AuctionEnded(
+    event ItemWithdrawn(
         uint256 indexed auctionId,
         address indexed winner,
         uint256 winningBid
+    );
+    event FundsWithdrawn(
+        uint256 indexed auctionId,
+        address indexed auctioneer,
+        uint256 amount
     );
 
     modifier onlyActiveAuction(uint256 auctionId) {
@@ -107,6 +112,7 @@ contract AllPayAuction is Ownable {
                 tokenIdOrAmount
             );
         }
+
         uint256 auctionId = auctionCounter;
         auctions[auctionId] = Auction({
             id: auctionCounter++,
@@ -192,7 +198,11 @@ contract AllPayAuction is Ownable {
 
         auction.tokenIdOrAmount = 0;
 
-        emit AuctionEnded(auctionId, auction.highestBidder, auction.highestBid);
+        emit ItemWithdrawn(
+            auctionId,
+            auction.highestBidder,
+            auction.highestBid
+        );
     }
 
     function withdrawFunds(uint256 auctionId) external {
@@ -207,5 +217,10 @@ contract AllPayAuction is Ownable {
         auction.availableFunds = 0; // Reset availableFunds to zero prevent re-entrancy
 
         payable(auction.auctioneer).transfer(withdrawalAmount);
+        emit FundsWithdrawn(
+            auctionId,
+            auction.highestBidder,
+            auction.highestBid
+        );
     }
 }
