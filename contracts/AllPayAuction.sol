@@ -43,17 +43,24 @@ contract AllPayAuction is Ownable {
         address indexed auctioneer,
         address tokenAddress,
         uint256 tokenIdOrAmount,
-        uint256 startingBid
+        uint256 startingBid,
+        uint256 highestBid,
+        uint256 deadline
     );
     event BidPlaced(
         uint256 indexed auctionId,
         address indexed bidder,
         uint256 bidAmount
     );
-    event AuctionEnded(
+    event ItemWithdrawn(
         uint256 indexed auctionId,
         address indexed winner,
         uint256 winningBid
+    );
+    event FundsWithdrawn(
+        uint256 indexed auctionId,
+        address indexed auctioneer,
+        uint256 amount
     );
 
     modifier onlyActiveAuction(uint256 auctionId) {
@@ -105,6 +112,7 @@ contract AllPayAuction is Ownable {
                 tokenIdOrAmount
             );
         }
+
         uint256 auctionId = auctionCounter;
         auctions[auctionId] = Auction({
             id: auctionCounter++,
@@ -117,7 +125,7 @@ contract AllPayAuction is Ownable {
             tokenIdOrAmount: tokenIdOrAmount,
             startingBid: startingBid,
             highestBid: 0,
-            highestBidder: address(0),
+            highestBidder: msg.sender,
             deadline: block.timestamp + deadline,
             minBidDelta: minBidDelta,
             deadlineExtension: deadlineExtension,
@@ -133,7 +141,9 @@ contract AllPayAuction is Ownable {
             msg.sender,
             tokenAddress,
             tokenIdOrAmount,
-            startingBid
+            startingBid,
+            0,
+            deadline
         );
     }
 
@@ -158,51 +168,41 @@ contract AllPayAuction is Ownable {
         emit BidPlaced(auctionId, msg.sender, msg.value);
     }
 
-    //if deadline has been reached
-    function endAuction(uint256 auctionId) external {
+    function hasEnded(uint256 auctionId) external view returns (bool) {
+        return block.timestamp >= auctions[auctionId].deadline;
+    }
+
+    function withdrawAuctionedItem(uint256 auctionId) external {
         Auction storage auction = auctions[auctionId];
+        require(
+            msg.sender == auction.highestBidder,
+            "Only highest bidder can withdraw auctioned item"
+        );
+        require(
+            block.timestamp >= auction.deadline,
+            "Auction has not ended yet"
+        );
 
-        if (block.timestamp >= auction.deadline) {
-            if (auction.highestBidder != address(0)) {
-                if (auction.auctionType == AuctionType.NFT) {
-                    IERC721(auction.tokenAddress).safeTransferFrom(
-                        address(this),
-                        auction.highestBidder,
-                        auction.tokenIdOrAmount
-                    );
-                } else if (auction.auctionType == AuctionType.Token) {
-                    IERC20(auction.tokenAddress).transfer(
-                        auction.highestBidder,
-                        auction.tokenIdOrAmount
-                    );
-                }
-
-                // Transfer all collected bids to the auctioneer
-                payable(auction.auctioneer).transfer(auction.availableFunds);
-
-                emit AuctionEnded(
-                    auctionId,
-                    auction.highestBidder,
-                    auction.highestBid
-                );
-            } else {
-                // Return the NFT or tokens to the auctioneer if the auction has ended without any bids
-                if (auction.auctionType == AuctionType.NFT) {
-                    IERC721(auction.tokenAddress).safeTransferFrom(
-                        address(this),
-                        auction.auctioneer,
-                        auction.tokenIdOrAmount
-                    );
-                } else if (auction.auctionType == AuctionType.Token) {
-                    IERC20(auction.tokenAddress).transfer(
-                        auction.auctioneer,
-                        auction.tokenIdOrAmount
-                    );
-                }
-
-                emit AuctionEnded(auctionId, auction.auctioneer, 0);
-            }
+        if (auction.auctionType == AuctionType.NFT) {
+            IERC721(auction.tokenAddress).safeTransferFrom(
+                address(this),
+                auction.highestBidder,
+                auction.tokenIdOrAmount
+            );
+        } else if (auction.auctionType == AuctionType.Token) {
+            IERC20(auction.tokenAddress).transfer(
+                auction.highestBidder,
+                auction.tokenIdOrAmount
+            );
         }
+
+        auction.tokenIdOrAmount = 0;
+
+        emit ItemWithdrawn(
+            auctionId,
+            auction.highestBidder,
+            auction.highestBid
+        );
     }
 
     function withdrawFunds(uint256 auctionId) external {
@@ -217,5 +217,10 @@ contract AllPayAuction is Ownable {
         auction.availableFunds = 0; // Reset availableFunds to zero prevent re-entrancy
 
         payable(auction.auctioneer).transfer(withdrawalAmount);
+        emit FundsWithdrawn(
+            auctionId,
+            auction.highestBidder,
+            auction.highestBid
+        );
     }
 }
