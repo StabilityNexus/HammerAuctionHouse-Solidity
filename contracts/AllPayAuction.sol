@@ -20,8 +20,8 @@ contract AllPayAuction is Ownable {
         string imageUrl;
         AuctionType auctionType;
         address auctioneer;
-        address auctionedtokenAddress;
-        uint256 auctionedtokenIdOrAmount;
+        address auctionedTokenAddress;
+        uint256 auctionedTokenIdOrAmount;
         uint256 startingBid;
         uint256 highestBid;
         address highestBidder;
@@ -34,6 +34,7 @@ contract AllPayAuction is Ownable {
 
     uint256 private auctionCounter;
     mapping(uint256 => Auction) public auctions;
+
     event AuctionCreated(
         uint256 indexed auctionId,
         string name,
@@ -41,8 +42,8 @@ contract AllPayAuction is Ownable {
         string imageUrl,
         AuctionType auctionType,
         address indexed auctioneer,
-        address auctionedtokenAddress,
-        uint256 auctionedtokenIdOrAmount,
+        address auctionedTokenAddress,
+        uint256 auctionedTokenIdOrAmount,
         uint256 startingBid,
         uint256 highestBid,
         uint256 deadline
@@ -76,41 +77,24 @@ contract AllPayAuction is Ownable {
         string memory description,
         string memory imageUrl,
         AuctionType auctionType,
-        address auctionedtokenAddress,
-        uint256 auctionedtokenIdOrAmount,
+        address auctionedTokenAddress,
+        uint256 auctionedTokenIdOrAmount,
         uint256 startingBid,
         uint256 minBidDelta,
         uint256 deadlineExtension,
-        uint256 deadline
+        uint256 duration
     ) external {
         require(bytes(name).length > 0, "Name cannot be empty");
         require(startingBid > 0, "Starting bid must be greater than 0");
         require(minBidDelta > 0, "Minimum bid delta must be greater than 0");
-        require(
-            deadlineExtension > 0,
-            "Deadline extension must be greater than 0"
-        );
+        require(deadlineExtension > 0,"Deadline extension must be greater than 0");
 
         if (auctionType == AuctionType.NFT) {
-            require(
-                IERC721(auctionedtokenAddress).ownerOf(auctionedtokenIdOrAmount) == msg.sender,
-                "Caller must own the NFT"
-            );
-            IERC721(auctionedtokenAddress).transferFrom(
-                msg.sender,
-                address(this),
-                auctionedtokenIdOrAmount
-            );
-        } else if (auctionType == AuctionType.Token) {
-            require(
-                IERC20(auctionedtokenAddress).balanceOf(msg.sender) >= auctionedtokenIdOrAmount,
-                "Caller must have sufficient tokens"
-            );
-            IERC20(auctionedtokenAddress).transferFrom(
-                msg.sender,
-                address(this),
-                auctionedtokenIdOrAmount
-            );
+            require(IERC721(auctionedTokenAddress).ownerOf(auctionedTokenIdOrAmount) == msg.sender,"Caller must own the NFT");
+            IERC721(auctionedTokenAddress).transferFrom(msg.sender,address(this),auctionedTokenIdOrAmount);
+        } else {
+            require(IERC20(auctionedTokenAddress).balanceOf(msg.sender) >= auctionedTokenIdOrAmount,"Caller must have sufficient tokens");
+            IERC20(auctionedTokenAddress).transferFrom(msg.sender,address(this),auctionedTokenIdOrAmount);
         }
 
         uint256 auctionId = auctionCounter;
@@ -121,12 +105,12 @@ contract AllPayAuction is Ownable {
             imageUrl: imageUrl,
             auctionType: auctionType,
             auctioneer: msg.sender,
-            auctionedtokenAddress: auctionedtokenAddress,
-            auctionedtokenIdOrAmount: auctionedtokenIdOrAmount,
+            auctionedTokenAddress: auctionedTokenAddress,
+            auctionedTokenIdOrAmount: auctionedTokenIdOrAmount,
             startingBid: startingBid,
             highestBid: 0,
             highestBidder: msg.sender,
-            deadline: block.timestamp + deadline,
+            deadline: block.timestamp + duration,
             minBidDelta: minBidDelta,
             deadlineExtension: deadlineExtension,
             totalBids: 0,
@@ -139,11 +123,11 @@ contract AllPayAuction is Ownable {
             imageUrl,
             auctionType,
             msg.sender,
-            auctionedtokenAddress,
-            auctionedtokenIdOrAmount,
+            auctionedTokenAddress,
+            auctionedTokenIdOrAmount,
             startingBid,
             0,
-            deadline
+            block.timestamp + duration
         );
     }
 
@@ -151,11 +135,8 @@ contract AllPayAuction is Ownable {
         uint256 auctionId
     ) external payable onlyActiveAuction(auctionId) {
         Auction storage auction = auctions[auctionId];
-
-        require(
-            msg.value >= auction.highestBid + auction.minBidDelta,
-            "Bid must be higher than the current highest bid plus minimum delta"
-        );
+        require(msg.value >= auction.highestBid + auction.minBidDelta,"Bid must be higher than the current highest bid plus minimum delta");
+        require(auction.auctionedTokenAddress != address(0),"Auctioned item already withdrawn");
 
         auction.highestBid = msg.value;
         auction.highestBidder = msg.sender;
@@ -174,29 +155,17 @@ contract AllPayAuction is Ownable {
 
     function withdrawAuctionedItem(uint256 auctionId) external {
         Auction storage auction = auctions[auctionId];
-        require(
-            msg.sender == auction.highestBidder,
-            "Only highest bidder can withdraw auctioned item"
-        );
-        require(
-            block.timestamp >= auction.deadline,
-            "Auction has not ended yet"
-        );
+        require(msg.sender == auction.highestBidder,"Only highest bidder can withdraw auctioned item");
+        require(block.timestamp >= auction.deadline,"Auction has not ended yet");
+        require(auction.auctionedTokenAddress != address(0),"Auctioned item already withdrawn");
 
         if (auction.auctionType == AuctionType.NFT) {
-            IERC721(auction.auctionedtokenAddress).safeTransferFrom(
-                address(this),
-                auction.highestBidder,
-                auction.auctionedtokenIdOrAmount
-            );
+            IERC721(auction.auctionedTokenAddress).safeTransferFrom(address(this),auction.highestBidder,auction.auctionedTokenIdOrAmount);
         } else if (auction.auctionType == AuctionType.Token) {
-            IERC20(auction.auctionedtokenAddress).transfer(
-                auction.highestBidder,
-                auction.auctionedtokenIdOrAmount
-            );
+            IERC20(auction.auctionedTokenAddress).transfer(auction.highestBidder,auction.auctionedTokenIdOrAmount);
         }
 
-        auction.auctionedtokenIdOrAmount = 0;
+        auction.auctionedTokenAddress = address(0);
 
         emit ItemWithdrawn(
             auctionId,
@@ -207,10 +176,7 @@ contract AllPayAuction is Ownable {
 
     function withdrawFunds(uint256 auctionId) external {
         Auction storage auction = auctions[auctionId];
-        require(
-            msg.sender == auction.auctioneer,
-            "Only auctioneer can withdraw funds"
-        );
+        require(msg.sender == auction.auctioneer,"Only auctioneer can withdraw funds");
         require(auction.availableFunds > 0, "No funds to withdraw");
 
         uint256 withdrawalAmount = auction.availableFunds;

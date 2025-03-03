@@ -143,8 +143,8 @@ contract AllPayAuctionERC20 is Ownable {
         uint256 bidAmount
     ) external onlyActiveAuction(auctionId) {
         Auction storage auction = auctions[auctionId];
-
         IERC20 biddingToken = IERC20(auction.biddingtokenAddress);
+        require(auction.auctionedTokenAddress != address(0),"Auctioned item already withdrawn");
         require(biddingToken.balanceOf(msg.sender) >= bidAmount,"Caller must have sufficient tokens");
         require(bidAmount >= auction.highestBid + auction.minBidDelta,"Bid must be higher than the current highest bid plus minimum delta");
         require(biddingToken.transferFrom(msg.sender, address(this), bidAmount), "Transfer failed");
@@ -166,6 +166,7 @@ contract AllPayAuctionERC20 is Ownable {
         Auction storage auction = auctions[auctionId];
         require(msg.sender == auction.highestBidder,"Only highest bidder can withdraw auctioned item");
         require(block.timestamp >= auction.deadline,"Auction has not ended yet");
+        require(auction.auctionedTokenAddress != address(0),"Item already withdrawn");
 
         if (auction.auctionType == AuctionType.NFT) {
             IERC721(auction.auctionedTokenAddress).safeTransferFrom(address(this),auction.highestBidder,auction.auctionedTokenIdOrAmount);
@@ -173,7 +174,7 @@ contract AllPayAuctionERC20 is Ownable {
             IERC20(auction.auctionedTokenAddress).transfer(auction.highestBidder,auction.auctionedTokenIdOrAmount);
         }
 
-        auction.auctionedTokenIdOrAmount = 0;
+        auction.auctionedTokenAddress = address(0);
 
         emit ItemWithdrawn(
             auctionId,
