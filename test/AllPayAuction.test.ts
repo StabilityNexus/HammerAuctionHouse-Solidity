@@ -63,7 +63,7 @@ describe("AllPayAuction", function () {
       expect(auction.auctioneer).to.equal(await auctioneer.getAddress());
       expect(auction.totalBids).to.equal(0);
       expect(auction.availableFunds).to.equal(0);
-      expect(auction.auctionedtokenIdOrAmount).to.equal(1);
+      expect(auction.auctionedTokenIdOrAmount).to.equal(1);
     });
 
     it("should create a token auction with metadata", async function () {
@@ -98,7 +98,7 @@ describe("AllPayAuction", function () {
       expect(auction.auctionType).to.equal(1);
       expect(auction.totalBids).to.equal(0);
       expect(auction.availableFunds).to.equal(0);
-      expect(auction.auctionedtokenIdOrAmount).to.equal(amount);
+      expect(auction.auctionedTokenIdOrAmount).to.equal(amount);
     });
 
     it("should reject auction creation with empty name", async function () {

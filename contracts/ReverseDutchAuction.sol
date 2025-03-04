@@ -25,7 +25,6 @@ contract ReverseDutchAuction is Ownable {
         uint256 auctionedTokenIdOrAmount;
         uint256 startingBid;
         uint256 reserveBid;
-        uint256 priceUpdateInterval;
         uint256 startTime;
         uint256 deadline;
     }
@@ -44,7 +43,6 @@ contract ReverseDutchAuction is Ownable {
         uint256 auctionedTokenIdOrAmount,
         uint256 startingBid,
         uint256 reserveBid,
-        uint256 priceUpdateInterval,
         uint256 startTime,
         uint256 deadline
     );
@@ -65,12 +63,10 @@ contract ReverseDutchAuction is Ownable {
         uint256 auctionedTokenIdOrAmount,
         uint256 startingBid,
         uint256 reserveBid,
-        uint256 priceUpdateInterval,
         uint256 duration
     ) external {
         require(startingBid > reserveBid, "Initial bid must be greater than reserve bid");
         require(duration > 0, "Duration must be greater than zero");
-        require(priceUpdateInterval > 0, "Price update interval must be greater than zero");
 
         if(auctionType==AuctionType.NFT){
             require(IERC721(auctionedTokenAddress).ownerOf(auctionedTokenIdOrAmount)==msg.sender,"Caller must own the NFT");
@@ -92,7 +88,6 @@ contract ReverseDutchAuction is Ownable {
             auctionedTokenIdOrAmount: auctionedTokenIdOrAmount,
             startingBid: startingBid,
             reserveBid: reserveBid,
-            priceUpdateInterval: priceUpdateInterval,
             startTime: block.timestamp,
             deadline: block.timestamp + duration
         });
@@ -108,7 +103,6 @@ contract ReverseDutchAuction is Ownable {
             auctionedTokenIdOrAmount,
             startingBid,
             reserveBid,
-            priceUpdateInterval,
             block.timestamp,
             block.timestamp + duration
         );
@@ -133,7 +127,7 @@ contract ReverseDutchAuction is Ownable {
     function placeBid(uint256 auctionId) external payable {
         Auction storage auction = auctions[auctionId];
         require(hasEnded(auctionId)==false, "Auction has ended");
-        require(auction.auctionedTokenAddress==address(0), "Item already withdrawn");
+        require(auction.auctionedTokenAddress!=address(0), "Item already withdrawn");
         uint256 currentPrice = getCurrentPrice(auctionId); 
         uint256 priceBuffer=currentPrice / 100; //Added for on-chain time delay
         require(msg.value >= currentPrice - priceBuffer, "Insufficient ETH to buy");
