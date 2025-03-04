@@ -194,8 +194,8 @@ contract AllPayAuctionERC20 is Ownable {
         IERC20(auction.biddingtokenAddress).transfer(auction.auctioneer, withdrawalAmount);
         emit FundsWithdrawn(
             auctionId,
-            auction.highestBidder,
-            auction.highestBid
+            auction.auctioneer,
+            withdrawalAmount
         );
     }
 }

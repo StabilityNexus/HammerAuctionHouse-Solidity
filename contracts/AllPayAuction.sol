@@ -185,8 +185,8 @@ contract AllPayAuction is Ownable {
         payable(auction.auctioneer).transfer(withdrawalAmount);
         emit FundsWithdrawn(
             auctionId,
-            auction.highestBidder,
-            auction.highestBid
+            auction.auctioneer,
+            withdrawalAmount
         );
     }
 }
