@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract AllPayAuction is Ownable {
+contract HighestBidderPayAuction is Ownable {
     constructor() Ownable(msg.sender) {}
 
     enum AuctionType {
@@ -29,7 +29,8 @@ contract AllPayAuction is Ownable {
         uint256 minBidDelta;
         uint256 deadlineExtension;
         uint256 totalBids;
-        uint256 availableFunds;
+        // Mapping to track each bidder's current bid amount
+        mapping(address => uint256) bidderToAmount;
     }
 
     uint256 private auctionCounter;
@@ -51,6 +52,11 @@ contract AllPayAuction is Ownable {
         uint256 indexed auctionId,
         address indexed bidder,
         uint256 bidAmount
+    );
+    event BidRefunded(
+        uint256 indexed auctionId,
+        address indexed bidder,
+        uint256 refundAmount
     );
     event ItemWithdrawn(
         uint256 indexed auctionId,
@@ -143,7 +149,7 @@ contract AllPayAuction is Ownable {
             tokenIdOrAmount,
             startingBid,
             0,
-            deadline
+            newAuction.deadline
         );
     }
 
@@ -152,14 +158,29 @@ contract AllPayAuction is Ownable {
     ) external payable onlyActiveAuction(auctionId) {
         Auction storage auction = auctions[auctionId];
 
+        // If this is the first bid, check against starting bid
+        uint256 minRequired = auction.highestBid == 0 ? auction.startingBid : auction.highestBid + auction.minBidDelta;
+        
         require(
-            msg.value >= auction.highestBid + auction.minBidDelta,
+            msg.value >= minRequired,
             "Bid must be higher than the current highest bid plus minimum delta"
         );
 
+        // Refund the previous highest bidder
+        if (auction.highestBidder != address(0)) {
+            uint256 refundAmount = auction.bidderToAmount[auction.highestBidder];
+            auction.bidderToAmount[auction.highestBidder] = 0;
+            
+            (bool success, ) = payable(auction.highestBidder).call{value: refundAmount}("");
+            require(success, "Refund failed");
+            
+            emit BidRefunded(auctionId, auction.highestBidder, refundAmount);
+        }
+
+        // Update auction state
         auction.highestBid = msg.value;
         auction.highestBidder = msg.sender;
-        auction.availableFunds += msg.value;
+        auction.bidderToAmount[msg.sender] = msg.value;
         auction.totalBids++;
 
         // Extend the auction deadline
@@ -181,6 +202,10 @@ contract AllPayAuction is Ownable {
         require(
             block.timestamp >= auction.deadline,
             "Auction has not ended yet"
+        );
+        require(
+            auction.highestBidder != address(0),
+            "No bids were placed on this auction"
         );
 
         if (auction.auctionType == AuctionType.NFT) {
@@ -211,16 +236,16 @@ contract AllPayAuction is Ownable {
             msg.sender == auction.auctioneer,
             "Only auctioneer can withdraw funds"
         );
-        require(auction.availableFunds > 0, "No funds to withdraw");
+        require(auction.highestBid > 0, "No bids were placed on this auction");
 
-        uint256 withdrawalAmount = auction.availableFunds;
-        auction.availableFunds = 0; // Reset availableFunds to zero prevent re-entrancy
+        uint256 withdrawalAmount = auction.highestBid;
+        auction.highestBid = 0; // Reset to prevent re-entrancy
 
         payable(auction.auctioneer).transfer(withdrawalAmount);
         emit FundsWithdrawn(
             auctionId,
-            auction.highestBidder,
-            auction.highestBid
+            auction.auctioneer,
+            withdrawalAmount
         );
     }
 }
