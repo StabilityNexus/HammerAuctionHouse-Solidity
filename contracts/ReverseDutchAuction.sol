@@ -20,13 +20,16 @@ contract ReverseDutchAuction is Ownable {
         string description;
         string imageUrl;
         AuctionType auctionType;
+        bool itemWithdrawn;
         address auctioneer;
         address auctionedTokenAddress;
         uint256 auctionedTokenIdOrAmount;
         uint256 startingBid;
         uint256 reserveBid;
+        uint256 bidMargin;
         uint256 startTime;
         uint256 deadline;
+        uint256 maxDuration;
     }
 
     uint256 private auctionCounter;
@@ -63,10 +66,10 @@ contract ReverseDutchAuction is Ownable {
         uint256 auctionedTokenIdOrAmount,
         uint256 startingBid,
         uint256 reserveBid,
-        uint256 duration
+        uint256 maxDuration
     ) external {
         require(startingBid > reserveBid, "Initial bid must be greater than reserve bid");
-        require(duration > 0, "Duration must be greater than zero");
+        require(maxDuration > 0, "Duration must be greater than zero");
 
         if(auctionType==AuctionType.NFT){
             require(IERC721(auctionedTokenAddress).ownerOf(auctionedTokenIdOrAmount)==msg.sender,"Caller must own the NFT");
@@ -83,13 +86,16 @@ contract ReverseDutchAuction is Ownable {
             description: description,
             imageUrl: imageUrl,
             auctionType: auctionType,
+            itemWithdrawn: false,
             auctioneer: msg.sender,
             auctionedTokenAddress: auctionedTokenAddress,
             auctionedTokenIdOrAmount: auctionedTokenIdOrAmount,
             startingBid: startingBid,
             reserveBid: reserveBid,
+            bidMargin: startingBid - reserveBid,
             startTime: block.timestamp,
-            deadline: block.timestamp + duration
+            deadline: block.timestamp + maxDuration,
+            maxDuration: maxDuration
         });
 
         emit AuctionCreated(
@@ -104,7 +110,7 @@ contract ReverseDutchAuction is Ownable {
             startingBid,
             reserveBid,
             block.timestamp,
-            block.timestamp + duration
+            block.timestamp + maxDuration
         );
     }
 
@@ -116,8 +122,7 @@ contract ReverseDutchAuction is Ownable {
             return auction.reserveBid;
         }
 
-        uint256 priceDrop = ((auction.startingBid - auction.reserveBid) * elapsedTime) / (auction.deadline-auction.startTime);
-        return auction.startingBid - priceDrop;
+        return auction.startingBid - ((auction.bidMargin * elapsedTime) / (auction.maxDuration));
     }
 
     function hasEnded(uint256 auctionId) public view returns (bool) {
@@ -127,10 +132,9 @@ contract ReverseDutchAuction is Ownable {
     function placeBid(uint256 auctionId) external payable {
         Auction storage auction = auctions[auctionId];
         require(hasEnded(auctionId)==false, "Auction has ended");
-        require(auction.auctionedTokenAddress!=address(0), "Item already withdrawn");
+        require(auction.itemWithdrawn==false, "Item already withdrawn");
         uint256 currentPrice = getCurrentPrice(auctionId); 
-        uint256 priceBuffer=currentPrice / 100; //Added for on-chain time delay
-        require(msg.value >= currentPrice - priceBuffer, "Insufficient ETH to buy");
+        require(msg.value >= currentPrice, "Insufficient ETH to buy");
 
 
         if (auction.auctionType == AuctionType.NFT) {
@@ -145,9 +149,11 @@ contract ReverseDutchAuction is Ownable {
                 auction.auctionedTokenIdOrAmount
             );
         }
-        payable(auction.auctioneer).transfer(currentPrice);
 
-        auction.auctionedTokenAddress = address(0); //Avoiding multiple withdrawals
+        payable(auction.auctioneer).transfer(currentPrice);
+        payable(msg.sender).transfer(msg.value - currentPrice);
+
+        auction.itemWithdrawn = true; //Avoiding multiple withdrawals
         
         emit ItemWithdrawn(auctionId, msg.sender, currentPrice);
     }
@@ -158,7 +164,8 @@ contract ReverseDutchAuction is Ownable {
         Auction storage auction = auctions[auctionId];
         require(auction.auctioneer==msg.sender,"Only auctioneer can withdraw item");
         require(hasEnded(auctionId),"Auction has not ended yet");
-        require(auction.auctionedTokenAddress!=address(0),"Item already withdrawn");
+        require(auction.itemWithdrawn==false, "Item already withdrawn");
+
 
         if (auction.auctionType == AuctionType.NFT) {
             IERC721(auction.auctionedTokenAddress).safeTransferFrom(
@@ -173,7 +180,7 @@ contract ReverseDutchAuction is Ownable {
             );
         }
 
-        auction.auctionedTokenAddress = address(0); //Avoiding multiple withdrawals
+        auction.itemWithdrawn = true; //Avoiding multiple withdrawals
 
     }
 
