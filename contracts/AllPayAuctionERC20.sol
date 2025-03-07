@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract AllPayAuction is Ownable {
+contract AllPayAuctionERC20 is Ownable {
     constructor() Ownable(msg.sender) {}
 
     enum AuctionType {
@@ -21,6 +21,7 @@ contract AllPayAuction is Ownable {
         AuctionType auctionType;
         bool itemWithdrawn;
         address auctioneer;
+        address biddingtokenAddress;
         address auctionedTokenAddress;
         uint256 auctionedTokenIdOrAmount;
         uint256 startingBid;
@@ -35,7 +36,6 @@ contract AllPayAuction is Ownable {
 
     uint256 private auctionCounter;
     mapping(uint256 => Auction) public auctions;
-
     event AuctionCreated(
         uint256 indexed auctionId,
         string name,
@@ -43,6 +43,7 @@ contract AllPayAuction is Ownable {
         string imageUrl,
         AuctionType auctionType,
         address indexed auctioneer,
+        address biddingtokenAddress,
         address auctionedTokenAddress,
         uint256 auctionedTokenIdOrAmount,
         uint256 startingBid,
@@ -78,12 +79,13 @@ contract AllPayAuction is Ownable {
         string memory description,
         string memory imageUrl,
         AuctionType auctionType,
+        address biddingtokenAddress,
         address auctionedTokenAddress,
         uint256 auctionedTokenIdOrAmount,
         uint256 startingBid,
         uint256 minBidDelta,
         uint256 deadlineExtension,
-        uint256 duration
+        uint256 deadline
     ) external {
         require(bytes(name).length > 0, "Name cannot be empty");
         require(startingBid > 0, "Starting bid must be greater than 0");
@@ -92,7 +94,7 @@ contract AllPayAuction is Ownable {
         if (auctionType == AuctionType.NFT) {
             require(IERC721(auctionedTokenAddress).ownerOf(auctionedTokenIdOrAmount) == msg.sender,"Caller must own the NFT");
             IERC721(auctionedTokenAddress).transferFrom(msg.sender,address(this),auctionedTokenIdOrAmount);
-        } else {
+        } else if (auctionType == AuctionType.Token) {
             require(IERC20(auctionedTokenAddress).balanceOf(msg.sender) >= auctionedTokenIdOrAmount,"Caller must have sufficient tokens");
             IERC20(auctionedTokenAddress).transferFrom(msg.sender,address(this),auctionedTokenIdOrAmount);
         }
@@ -106,12 +108,13 @@ contract AllPayAuction is Ownable {
             auctionType: auctionType,
             itemWithdrawn: false,
             auctioneer: msg.sender,
+            biddingtokenAddress: biddingtokenAddress,
             auctionedTokenAddress: auctionedTokenAddress,
             auctionedTokenIdOrAmount: auctionedTokenIdOrAmount,
             startingBid: startingBid,
             highestBid: 0,
             highestBidder: msg.sender,
-            deadline: block.timestamp + duration,
+            deadline: block.timestamp + deadline,
             minBidDelta: minBidDelta,
             deadlineExtension: deadlineExtension,
             totalBids: 0,
@@ -124,30 +127,33 @@ contract AllPayAuction is Ownable {
             imageUrl,
             auctionType,
             msg.sender,
+            biddingtokenAddress,
             auctionedTokenAddress,
             auctionedTokenIdOrAmount,
             startingBid,
             0,
-            block.timestamp + duration
+            deadline
         );
     }
 
     function placeBid(
-        uint256 auctionId
-    ) external payable onlyActiveAuction(auctionId) {
+        uint256 auctionId,
+        uint256 bidAmount
+    ) external onlyActiveAuction(auctionId) {
         Auction storage auction = auctions[auctionId];
-        require(msg.value >= auction.highestBid + auction.minBidDelta,"Bid must be higher than the current highest bid plus minimum delta");
-        require(auction.itemWithdrawn == false,"Auctioned item already withdrawn");
+        IERC20 biddingToken = IERC20(auction.biddingtokenAddress);
+        require(auction.auctionedTokenAddress != address(0),"Auctioned item already withdrawn");
+        require(biddingToken.balanceOf(msg.sender) >= bidAmount,"Caller must have sufficient tokens");
+        require(bidAmount >= auction.highestBid + auction.minBidDelta,"Bid must be higher than the current highest bid plus minimum delta");
+        require(biddingToken.transferFrom(msg.sender, address(this), bidAmount), "Transfer failed");
 
-        auction.highestBid = msg.value;
+        auction.highestBid = bidAmount;
         auction.highestBidder = msg.sender;
-        auction.availableFunds += msg.value;
+        auction.availableFunds += bidAmount;
         auction.totalBids++;
-
-        // Extend the auction deadline
         auction.deadline += auction.deadlineExtension;
 
-        emit BidPlaced(auctionId, msg.sender, msg.value);
+        emit BidPlaced(auctionId, msg.sender, bidAmount);
     }
 
     function hasEnded(uint256 auctionId) external view returns (bool) {
@@ -158,7 +164,7 @@ contract AllPayAuction is Ownable {
         Auction storage auction = auctions[auctionId];
         require(msg.sender == auction.highestBidder,"Only highest bidder can withdraw auctioned item");
         require(block.timestamp >= auction.deadline,"Auction has not ended yet");
-        require(auction.itemWithdrawn==false,"Auctioned item already withdrawn");
+        require(auction.itemWithdrawn == false,"Item already withdrawn");
 
         if (auction.auctionType == AuctionType.NFT) {
             IERC721(auction.auctionedTokenAddress).safeTransferFrom(address(this),auction.highestBidder,auction.auctionedTokenIdOrAmount);
@@ -181,9 +187,9 @@ contract AllPayAuction is Ownable {
         require(auction.availableFunds > 0, "No funds to withdraw");
 
         uint256 withdrawalAmount = auction.availableFunds;
-        auction.availableFunds = 0; // Reset availableFunds to zero prevent re-entrancy
+        auction.availableFunds = 0;
 
-        payable(auction.auctioneer).transfer(withdrawalAmount);
+        IERC20(auction.biddingtokenAddress).transfer(auction.auctioneer, withdrawalAmount);
         emit FundsWithdrawn(
             auctionId,
             auction.auctioneer,

@@ -3,8 +3,7 @@ import { ethers } from "hardhat";
 async function main() {
   const [deployer] = await ethers.getSigners();
 
-  console.log("Deploying contracts with the account:", deployer.address);
-  const gasslessContract = await ethers.getContractFactory("AllPayAuction");
+  const gasslessContract = await ethers.getContractFactory("ReverseDutchAuction");
   const contract = await gasslessContract.deploy();
 
   console.log("Contract deployed to address:", contract.target);

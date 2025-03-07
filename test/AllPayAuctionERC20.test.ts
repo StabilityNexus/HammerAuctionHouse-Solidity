@@ -1,10 +1,10 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Signer } from "ethers";
-import { AllPayAuction, MockNFT, MockToken } from "../typechain-types";
+import { AllPayAuctionERC20, MockNFT, MockToken } from "../typechain-types";
 
-describe("AllPayAuction", function () {
-  let allPayAuction: AllPayAuction;
+describe("AllPayAuctionERC20", function () {
+  let allPayAuctionERC20: AllPayAuctionERC20;
   let mockNFT: MockNFT;
   let mockToken: MockToken;
   let owner: Signer;
@@ -23,19 +23,21 @@ describe("AllPayAuction", function () {
     const MockToken = await ethers.getContractFactory("MockToken");
     mockToken = await MockToken.deploy("MockToken", "MTK");
 
-    // Deploy AllPayAuction
-    const AllPayAuction = await ethers.getContractFactory("AllPayAuction");
-    allPayAuction = await AllPayAuction.deploy();
+    // Deploy AllPayAuctionERC20
+    const AllPayAuctionERC20 = await ethers.getContractFactory("AllPayAuctionERC20");
+    allPayAuctionERC20 = await AllPayAuctionERC20.deploy();
 
     // Mint NFT to auctioneer
     await mockNFT.mint(auctioneer.getAddress(), 1);
-    // Mint tokens to auctioneer
+    // Mint tokens to auctioneer and bidders
     await mockToken.mint(auctioneer.getAddress(), ethers.parseEther("100"));
+    await mockToken.mint(bidder1.getAddress(), ethers.parseEther("100"));  
+    await mockToken.mint(bidder2.getAddress(), ethers.parseEther("100"));
   });
 
-  describe("Auction Creation", function () {
+  describe("Auction Creation IN ERC20", function () {
     it("should create an NFT auction with metadata", async function () {
-      await mockNFT.connect(auctioneer).approve(allPayAuction.getAddress(), 1);
+      await mockNFT.connect(auctioneer).approve(await allPayAuctionERC20.getAddress(), 1);
 
       const metadata = {
         name: "Rare NFT Auction",
@@ -43,11 +45,12 @@ describe("AllPayAuction", function () {
         imageUrl: "https://example.com/nft.jpg",
       };
 
-      const tx = await allPayAuction.connect(auctioneer).createAuction(
+      const tx = await allPayAuctionERC20.connect(auctioneer).createAuction(
         metadata.name,
         metadata.description,
         metadata.imageUrl,
         0, // NFT type
+        await mockToken.getAddress(), // biddingtokenAddress
         mockNFT.getAddress(),
         1, // tokenId
         ethers.parseEther("1"), // startingBid
@@ -56,7 +59,7 @@ describe("AllPayAuction", function () {
         5 // deadline
       );
 
-      const auction = await allPayAuction.auctions(0);
+      const auction = await allPayAuctionERC20.auctions(0);
       expect(auction.name).to.equal(metadata.name);
       expect(auction.description).to.equal(metadata.description);
       expect(auction.imageUrl).to.equal(metadata.imageUrl);
@@ -64,13 +67,14 @@ describe("AllPayAuction", function () {
       expect(auction.totalBids).to.equal(0);
       expect(auction.availableFunds).to.equal(0);
       expect(auction.auctionedTokenIdOrAmount).to.equal(1);
+      expect(auction.biddingtokenAddress).to.equal(await mockToken.getAddress());
     });
 
     it("should create a token auction with metadata", async function () {
       const amount = ethers.parseEther("10");
       await mockToken
         .connect(auctioneer)
-        .approve(allPayAuction.getAddress(), amount);
+        .approve(await allPayAuctionERC20.getAddress(), amount);
 
       const metadata = {
         name: "Token Sale",
@@ -78,12 +82,13 @@ describe("AllPayAuction", function () {
         imageUrl: "https://example.com/token.jpg",
       };
 
-      await allPayAuction.connect(auctioneer).createAuction(
+      await allPayAuctionERC20.connect(auctioneer).createAuction(
         metadata.name,
         metadata.description,
         metadata.imageUrl,
         1, // Token type
-        mockToken.getAddress(),
+        await mockToken.getAddress(), // biddingtokenAddress
+        await mockToken.getAddress(),
         amount,
         ethers.parseEther("1"),
         ethers.parseEther("0.1"),
@@ -91,7 +96,7 @@ describe("AllPayAuction", function () {
         5
       );
 
-      const auction = await allPayAuction.auctions(0);
+      const auction = await allPayAuctionERC20.auctions(0);
       expect(auction.name).to.equal(metadata.name);
       expect(auction.description).to.equal(metadata.description);
       expect(auction.imageUrl).to.equal(metadata.imageUrl);
@@ -99,17 +104,19 @@ describe("AllPayAuction", function () {
       expect(auction.totalBids).to.equal(0);
       expect(auction.availableFunds).to.equal(0);
       expect(auction.auctionedTokenIdOrAmount).to.equal(amount);
+      expect(auction.biddingtokenAddress).to.equal(await mockToken.getAddress());
     });
 
     it("should reject auction creation with empty name", async function () {
-      await mockNFT.connect(auctioneer).approve(allPayAuction.getAddress(), 1);
+      await mockNFT.connect(auctioneer).approve(await allPayAuctionERC20.getAddress(), 1);
 
       await expect(
-        allPayAuction.connect(auctioneer).createAuction(
+        allPayAuctionERC20.connect(auctioneer).createAuction(
           "", // empty name
           "description",
           "https://example.com/image.jpg",
           0,
+          await mockToken.getAddress(), // biddingtokenAddress
           mockNFT.getAddress(),
           1,
           ethers.parseEther("1"),
@@ -125,14 +132,15 @@ describe("AllPayAuction", function () {
     beforeEach(async function () {
       await mockNFT
         .connect(auctioneer)
-        .approve(await allPayAuction.getAddress(), 1);
-      await allPayAuction
+        .approve(await await allPayAuctionERC20.getAddress(), 1);
+      await allPayAuctionERC20
         .connect(auctioneer)
         .createAuction(
           "Test Auction",
           "Test Description",
           "https://example.com/test.jpg",
           0,
+          await mockToken.getAddress(), // biddingtokenAddress
           await mockNFT.getAddress(),
           1,
           ethers.parseEther("1"),
@@ -143,23 +151,21 @@ describe("AllPayAuction", function () {
     });
 
     it("should allow valid bids", async function () {
-      await allPayAuction.connect(bidder1).placeBid(0, {
-        value: ethers.parseEther("1.1"),
-      });
+      await mockToken.connect(bidder1).approve(await allPayAuctionERC20.getAddress(), ethers.parseEther("1.1"));
+      await allPayAuctionERC20.connect(bidder1).placeBid(0, ethers.parseEther("1.1"));
 
-      const auction = await allPayAuction.auctions(0);
+      const auction = await allPayAuctionERC20.auctions(0);
       expect(auction.highestBidder).to.equal(await bidder1.getAddress());
       expect(auction.highestBid).to.equal(ethers.parseEther("1.1"));
     });
 
     it("should extend deadline on bid", async function () {
-      const beforeBid = (await allPayAuction.auctions(0)).deadline;
+      const beforeBid = (await allPayAuctionERC20.auctions(0)).deadline;
 
-      await allPayAuction.connect(bidder1).placeBid(0, {
-        value: ethers.parseEther("1.1"),
-      });
+      await mockToken.connect(bidder1).approve(await allPayAuctionERC20.getAddress(), ethers.parseEther("1.1"));
+      await allPayAuctionERC20.connect(bidder1).placeBid(0, ethers.parseEther("1.1"));
 
-      const afterBid = (await allPayAuction.auctions(0)).deadline;
+      const afterBid = (await allPayAuctionERC20.auctions(0)).deadline;
       expect(afterBid).to.be.gt(beforeBid);
     });
   });
@@ -168,12 +174,13 @@ describe("AllPayAuction", function () {
     it("should transfer NFT to winner and funds to auctioneer", async function () {
       await mockNFT
         .connect(auctioneer)
-        .approve(await await allPayAuction.getAddress(), 1);
-      await allPayAuction.connect(auctioneer).createAuction(
+        .approve(await await allPayAuctionERC20.getAddress(), 1);
+      await allPayAuctionERC20.connect(auctioneer).createAuction(
         "Test Auction",
         "Test Description",
         "https://example.com/test.jpg",
         0,
+        await mockToken.getAddress(), // biddingtokenAddress
         await mockNFT.getAddress(),
         1,
         ethers.parseEther("1"),
@@ -181,27 +188,30 @@ describe("AllPayAuction", function () {
         10,
         5 // deadline is now directly in seconds
       );
+
+      // Mint tokens to bidder1 so they can place a bid
+      await mockToken.mint(bidder1.getAddress(), ethers.parseEther("10"));
       
-      await allPayAuction.connect(bidder1).placeBid(0, {
-        value: ethers.parseEther("1.1"),
-      });
+      await mockToken.connect(bidder1).approve(await allPayAuctionERC20.getAddress(), ethers.parseEther("1.5"));
+      await allPayAuctionERC20.connect(bidder1).placeBid(0, ethers.parseEther("1.5"));
 
       // Fast forward time by 20 seconds (10+5)
       await ethers.provider.send("evm_increaseTime", [20]);
       await ethers.provider.send("evm_mine", []);
 
-      const auctioneerBalanceBefore = await ethers.provider.getBalance(await auctioneer.getAddress());
+      const auctioneerBalanceBefore = await mockToken.balanceOf(await auctioneer.getAddress());
       
+      // Instead of endAuction, use the actual contract functions:
       // 1. Winner withdraws auctioned item
-      await allPayAuction.connect(bidder1).withdrawAuctionedItem(0);
+      await allPayAuctionERC20.connect(bidder1).withdrawAuctionedItem(0);
       
       // 2. Auctioneer withdraws funds
-      await allPayAuction.connect(auctioneer).withdrawFunds(0);
+      await allPayAuctionERC20.connect(auctioneer).withdrawFunds(0);
 
       const nftOwner = await mockNFT.ownerOf(1);
       expect(nftOwner).to.equal(await bidder1.getAddress());
 
-      const auctioneerBalanceAfter = await ethers.provider.getBalance(await auctioneer.getAddress());
+      const auctioneerBalanceAfter = await mockToken.balanceOf(await auctioneer.getAddress());
       expect(auctioneerBalanceAfter).to.be.gt(auctioneerBalanceBefore);
     });
   });
@@ -210,14 +220,15 @@ describe("AllPayAuction", function () {
     it("should allow auctioneer to withdraw accumulated bids", async function () {
       await mockNFT
         .connect(auctioneer)
-        .approve(await allPayAuction.getAddress(), 1);
-      await allPayAuction
+        .approve(await await allPayAuctionERC20.getAddress(), 1);
+      await allPayAuctionERC20
         .connect(auctioneer)
         .createAuction(
           "Test Auction",
           "Test Description",
           "https://example.com/test.jpg",
           0,
+          await mockToken.getAddress(), // biddingtokenAddress
           mockNFT.getAddress(),
           1,
           ethers.parseEther("1"),
@@ -226,17 +237,12 @@ describe("AllPayAuction", function () {
           5
         );
 
-      await allPayAuction.connect(bidder1).placeBid(0, {
-        value: ethers.parseEther("1.5"),
-      });
+      await mockToken.connect(bidder1).approve(await allPayAuctionERC20.getAddress(), ethers.parseEther("1.5"));
+      await allPayAuctionERC20.connect(bidder1).placeBid(0, ethers.parseEther("1.5"));
 
-      const balanceBefore = await ethers.provider.getBalance(
-        await auctioneer.getAddress()
-      );
-      await allPayAuction.connect(auctioneer).withdrawFunds(0);
-      const balanceAfter = await ethers.provider.getBalance(
-        await auctioneer.getAddress()
-      );
+      const balanceBefore = await mockToken.balanceOf(await auctioneer.getAddress());
+      await allPayAuctionERC20.connect(auctioneer).withdrawFunds(0);
+      const balanceAfter = await mockToken.balanceOf(await auctioneer.getAddress());
 
       expect(balanceAfter).to.be.gt(balanceBefore);
     });
