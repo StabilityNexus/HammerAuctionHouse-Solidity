@@ -54,6 +54,6 @@ abstract contract Auction is IERC721Receiver {
 
     // Used in allowing the contract to receive ERC721 tokens through SafeTransfer.
     function onERC721Received(address, address, uint256, bytes memory) public virtual override returns (bytes4) {
-        return this.onERC721Received.selector;
+        return IERC721Receiver.onERC721Received.selector;
     }    
 }

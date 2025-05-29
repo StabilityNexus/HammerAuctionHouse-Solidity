@@ -26,7 +26,7 @@ describe('EnglishAuction', function () {
         // Deploy mock ERC20 for bidding
         biddingToken = await MockToken.deploy('BiddingToken', 'BTK');
 
-        // Deploy AllPayAuction
+        // Deploy EnglishAuction 
         const EnglishAuction = await ethers.getContractFactory('EnglishAuction');
         englishAuction = await EnglishAuction.deploy();
 

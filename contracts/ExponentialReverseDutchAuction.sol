@@ -142,7 +142,7 @@ contract ExponentialReverseDutchAuction is Auction {
         auction.isClaimed = true;
         receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
-        emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, currentPrice);
+        emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 
     function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {

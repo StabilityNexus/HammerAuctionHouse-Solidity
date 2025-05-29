@@ -27,7 +27,7 @@ describe('LinearReverseDutchAuction', function () {
         // Deploy mock ERC20 for bidding
         biddingToken = await MockToken.deploy('BiddingToken', 'BTK');
 
-        // Deploy AllPayAuction
+        // Deploy Linear Reverse Dutch Auction contract
         const LinearReverseDutchAuction = await ethers.getContractFactory('LinearReverseDutchAuction');
         linearReverseDutchAuction = await LinearReverseDutchAuction.deploy();
 
