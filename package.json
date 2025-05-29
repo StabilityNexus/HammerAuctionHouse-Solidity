@@ -4,14 +4,17 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+"format": "prettier --write \"**/*.{js,ts,sol}\"",
+"format:check": "prettier --check \"**/*.{js,ts,sol}\""
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "hardhat": "^2.22.18"
+    "hardhat": "^2.22.18",
+    "prettier": "^3.5.3",
+    "prettier-plugin-solidity": "^2.0.0"
   },
   "dependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.8",
