@@ -3,15 +3,15 @@ pragma solidity ^0.8.28;
 
 import './abstract/Auction.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
-import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
 /**
- * @title AllPayAuction
- * @notice Auction contract for NFT and token auctions,where all bidders pay their bid amount but only the highest bidder wins the auction.
+ * @title EnglishAuction
+ * @notice Auction contract for NFT and token auctions, where the highest bidder wins the auction and rest of the bidders get their bid refunded.
  */
-contract AllPayAuction is Auction {
-    mapping(uint256 => AuctionData) public auctions; // auctionId => AuctionData
+contract EnglishAuction is Auction {
+    mapping(uint256 => AuctionData) public auctions;
     mapping(uint256 => mapping(address => uint256)) public bids; // auctionId => (bidder => bidAmount)
     struct AuctionData {
         uint256 id;
@@ -48,6 +48,7 @@ contract AllPayAuction is Auction {
         uint256 deadlineExtension
     );
 
+
     function createAuction(
         string memory name,
         string memory description,
@@ -61,7 +62,7 @@ contract AllPayAuction is Auction {
         uint256 duration,
         uint256 deadlineExtension
     ) external validAuctionParams(name,auctionedToken,biddingToken) {
-        require(duration > 0, 'Duration should be greater than 0');
+        require(duration > 0, 'Duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;
         auctions[auctionCounter] = AuctionData({
@@ -78,13 +79,13 @@ contract AllPayAuction is Auction {
             availableFunds: 0,
             minBidDelta: minBidDelta,
             highestBid: 0,
-            winner: msg.sender, //Initially set to auctioneer,to ensure that auctioneer can withdraw funds in case of no bids
+            winner: msg.sender,
             deadline: deadline,
             deadlineExtension: deadlineExtension,
             isClaimed: false
         });
         emit AuctionCreated(
-            auctionCounter++, //increment auctionCounter after creating the auction
+            auctionCounter++,
             name,
             description,
             imgUrl,
@@ -103,14 +104,18 @@ contract AllPayAuction is Auction {
     function placeBid(uint256 auctionId, uint256 bidAmount) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp < auction.deadline, 'Auction has ended');
+        require(bidAmount > 0, 'Bid amount should be greater than zero');
         require(auction.highestBid != 0 || bids[auctionId][msg.sender] + bidAmount >= auction.startingBid, 'First bid should be greater than starting bid');
         require(auction.highestBid == 0 || bids[auctionId][msg.sender] + bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
         bids[auctionId][msg.sender] += bidAmount;
         auction.highestBid = bids[auctionId][msg.sender];
         auction.winner = msg.sender;
-        auction.availableFunds += bidAmount;
+        auction.availableFunds = bids[auctionId][msg.sender];
         auction.deadline += auction.deadlineExtension;
         receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
+        if (auction.highestBid > 0) {
+            sendFunds(false, auction.biddingToken, auction.winner, auction.highestBid);
+        }
         emit bidPlaced(auctionId, msg.sender, bidAmount);
     }
 
@@ -119,6 +124,7 @@ contract AllPayAuction is Auction {
         require(msg.sender == auctions[auctionId].auctioneer, 'Not auctioneer!');
         uint256 withdrawAmount = auction.availableFunds;
         require(withdrawAmount > 0, 'No funds available');
+        require(block.timestamp > auction.deadline, 'Auction has not ended yet');
         auction.availableFunds = 0;
         sendFunds(false, auction.biddingToken, msg.sender, withdrawAmount);
         emit fundsWithdrawn(auctionId, withdrawAmount);
