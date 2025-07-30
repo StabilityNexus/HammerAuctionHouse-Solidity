@@ -85,7 +85,7 @@ contract LinearReverseDutchAuction is Auction {
 
     function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline, 'Auction has ended');
+        if(block.timestamp >= auction.deadline) return 0;
         require(!auction.isClaimed, 'Auction has ended');
         // price(t) = startingPrice - (((startingPrice - reservedPrice) * (timeElapsed)) / duration)
         return auction.startingPrice - (((auction.startingPrice - auction.reservedPrice) * (block.timestamp - (auction.deadline - auction.duration))) / auction.duration);
@@ -94,13 +94,13 @@ contract LinearReverseDutchAuction is Auction {
     //placeBid function is not required in this auction type as the price is determined by the auctioneer and the auctioneer can withdraw the item on placing the bid only
     function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline, 'Auction has ended'); //TODO: Allow re-claim method for auctioneer
+        require(block.timestamp < auction.deadline || auction.winner==auction.auctioneer, 'Auction has ended');
         require(!auction.isClaimed, 'Auction has been settled');
         uint256 currentPrice = getCurrentPrice(auctionId);
         auction.winner = msg.sender;
         auction.availableFunds = currentPrice;
         auction.isClaimed = true;
-        receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
+        if(auction.auctioneer != auction.winner) receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
         emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }

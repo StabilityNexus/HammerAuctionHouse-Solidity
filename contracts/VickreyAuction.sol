@@ -51,6 +51,12 @@ contract VickreyAuction is Auction {
         uint256 bidRevealEnd
     );
 
+    event BidRevealed(
+        uint256 indexed auctionId,
+        address indexed bidder,
+        uint256 bidAmount
+    );
+
     function createAuction(
         string memory name,
         string memory description,
@@ -59,14 +65,16 @@ contract VickreyAuction is Auction {
         address auctionedToken,
         uint256 auctionedTokenIdOrAmount,
         address biddingToken,
+        uint256 minBid,
         uint256 bidCommitDuration,
         uint256 bidRevealDuration
     ) external validAuctionParams(name,auctionedToken,biddingToken) {
-        require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day'); //setting minimum bid reveal threshold to 1 day
+        // require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day'); //setting minimum bid reveal threshold to 1 day //for testing only
         require(bidCommitDuration > 0, 'Bid commit duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 bidCommitEnd = bidCommitDuration + block.timestamp;
         uint256 bidRevealEnd = bidRevealDuration + bidCommitEnd;
+        bids[auctionCounter][msg.sender]=minBid;
         auctions[auctionCounter] = AuctionData({
             id: auctionCounter,
             name: name,
@@ -78,7 +86,7 @@ contract VickreyAuction is Auction {
             auctionedTokenIdOrAmount: auctionedTokenIdOrAmount,
             biddingToken: biddingToken,
             availableFunds: 0,
-            winningBid: 0,
+            winningBid: minBid,
             winner: msg.sender,
             startTime: block.timestamp,
             bidCommitEnd: bidCommitEnd,
@@ -93,6 +101,7 @@ contract VickreyAuction is Auction {
         require(block.timestamp < auction.bidCommitEnd, 'The commiting phase has ended!');
         require(commitments[auctionId][msg.sender] == bytes32(0), 'The sender has already commited');
         require(msg.value == 1000000000000000, 'Commit fee must be exactly 0.001 ETH'); // require exact fee
+        require(auction.auctioneer != msg.sender, 'Auctioneer cannot commit to bid');
         commitments[auctionId][msg.sender] = commitment;
     }
 
@@ -123,6 +132,7 @@ contract VickreyAuction is Auction {
         }
         (bool success, ) = msg.sender.call{value: 1000000000000000}(''); //Refund exactly 0.001 ETH
         require(success, 'Transfer failed');
+        emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
     function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {
@@ -142,7 +152,7 @@ contract VickreyAuction is Auction {
         require(block.timestamp > auction.bidRevealEnd, 'Reveal period has not ended yet');
         require(!auction.isClaimed, 'Auction had been settled');
         auction.isClaimed = true;
-        sendFunds(false, auction.biddingToken, msg.sender, bids[auctionId][msg.sender] - auction.winningBid); //Refunding the winning bid amount to the winner
+        if(msg.sender!=auction.auctioneer) sendFunds(false, auction.biddingToken, msg.sender, bids[auctionId][msg.sender] - auction.winningBid);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
         emit itemWithdrawn(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }

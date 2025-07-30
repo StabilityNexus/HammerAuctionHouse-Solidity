@@ -10,6 +10,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * @title ExponentialReverseDutchAuction
  * @notice Auction contract for NFT and token auctions, where price decreases exponentially over time from starting price to reserve price.
  * The first bidder to meet the current price wins the auction.
+ * price(t) = reservedPrice + (startingPrice - reservedPrice) * 2^(-timeElapsed*decayFactor)
  */
 contract ExponentialReverseDutchAuction is Auction {
     mapping(uint256 => AuctionData) public auctions;
@@ -68,7 +69,7 @@ contract ExponentialReverseDutchAuction is Auction {
     ) external validAuctionParams(name,auctionedToken,biddingToken) {
         require(startingPrice >= reservedPrice, 'Starting price should be higher than reserved price');
         require(duration > 0, 'Duration must be greater than zero seconds');
-        //decay Factor is scaled with 10^3 to ensure precision upto three decimal points
+        //decay Factor is scaled with 10^5 to ensure precision upto three decimal points
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount); 
         uint256 deadline = block.timestamp + duration;
         auctions[auctionCounter] = AuctionData({
@@ -108,39 +109,38 @@ contract ExponentialReverseDutchAuction is Auction {
     }
 
     function getDecayValue(uint256 x) internal view returns (uint256) {
-        if (x >= 61 * 1e3) {
+        if (x >= 61 * 1e5) {
             return 0;
         } else {
-            uint256 scaledPower = x / 1e3;
-            uint256 remainder = x % 1e3;
+            uint256 scaledPower = x / 1e5;
+            uint256 remainder = x % 1e5;
             if (remainder == 0) return decayLookup[scaledPower];
             uint256 higherValue = decayLookup[scaledPower];
             uint256 lowerValue = scaledPower < 60 ? decayLookup[scaledPower + 1] : 0;
-            return higherValue - ((higherValue - lowerValue) * remainder) / 1e3; //Linear interpolation
+            return higherValue - ((higherValue - lowerValue) * remainder) / 1e5; //Linear interpolation
         }
     }
 
     function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline, 'Auction has ended');
+        if(block.timestamp >= auction.deadline) return 0;
         require(!auction.isClaimed, 'Auction has ended');
         uint256 timeElapsed = block.timestamp - (auction.deadline - auction.duration);
         uint256 x = timeElapsed * auction.decayFactor;
         uint256 decayValue = getDecayValue(x);
-        // price(t) = reservedPrice + (startingPrice - reservedPrice) * 2^(-timeElapsed*decayFactor)
         return auction.reservedPrice + ((auction.startingPrice - auction.reservedPrice) * decayValue) / 1e18;
     }
 
     //placeBid function is not required in this auction type as the price is determined by the auctioneer and the auctioneer can withdraw the item on placing the bid only
     function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline, 'Auction has ended');
+        require(block.timestamp < auction.deadline || auction.winner==auction.auctioneer, 'Auction has ended');
         require(!auction.isClaimed, 'Auction has been settled');
         uint256 currentPrice = getCurrentPrice(auctionId);
         auction.winner = msg.sender;
         auction.availableFunds = currentPrice;
         auction.isClaimed = true;
-        receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
+        if(auction.auctioneer != auction.winner) receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
         emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }

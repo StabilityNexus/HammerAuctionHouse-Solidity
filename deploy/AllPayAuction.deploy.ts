@@ -3,7 +3,7 @@ import { ethers } from 'hardhat';
 async function main() {
     const [deployer] = await ethers.getSigners();
 
-    const gasslessContract = await ethers.getContractFactory('ReverseDutchAuction');
+    const gasslessContract = await ethers.getContractFactory('ExponentialReverseDutchAuction');
     const contract = await gasslessContract.deploy();
 
     console.log('Contract deployed to address:', contract.target);
@@ -15,3 +15,5 @@ main()
         console.error(error);
         process.exit(1);
     });
+
+    

@@ -5,14 +5,14 @@ import './abstract/Auction.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-//tell about bid formula
+
 /**
- * @title LogarithmReverseDutchAuction
+ * @title LogarithmicReverseDutchAuction
  * @notice Auction contract for NFT and token auctions, where price decreases logarithmically over time from starting price to reserve price.
  * The first bidder to meet the current price wins the auction.
  * price(t) = startingPrice - ((startingPrice - reservedPrice) * log(1+k*t)) / log(1+k*duration)
  */
-contract LogarithmReverseDutchAuction is Auction {
+contract LogarithmicReverseDutchAuction is Auction {
     mapping(uint256 => AuctionData) public auctions;
     struct AuctionData {
         uint256 id;
@@ -67,7 +67,7 @@ contract LogarithmReverseDutchAuction is Auction {
         require(duration > 0, 'Duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;
-        uint256 scalingFactor = log2Fixed(1 + (decayFactor * duration) / 1e3, 6); //log2(1+k*duration/1000) with 6 decimal precision
+        uint256 scalingFactor = log2Fixed(1 + (decayFactor * duration) / 1e5, 6); //log2(1+k*duration/10000) with 6 decimal precision
         require(scalingFactor > 0, 'Scaling factor must be greater than zero');
         auctions[auctionCounter] = AuctionData({
             id: auctionCounter,
@@ -106,7 +106,6 @@ contract LogarithmReverseDutchAuction is Auction {
         );
     }
 
-    //Returns the logarithm base 2 of x scaled by 10^18 with a specified number of fractional bits.
     function log2Fixed(uint256 x, uint8 fracBits) internal pure returns (uint256) {
         require(x > 0, 'log2Fixed: x must be > 0');
         uint256 Q = 1e18;
@@ -147,11 +146,11 @@ contract LogarithmReverseDutchAuction is Auction {
 
     function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline, 'Auction has ended');
+        if(block.timestamp >= auction.deadline) return 0;
         require(!auction.isClaimed, 'Auction has ended');
         uint256 timeElapsed = block.timestamp - (auction.deadline - auction.duration);
         uint256 x = timeElapsed * auction.decayFactor;
-        uint256 decayValue = log2Fixed(1 + x / 1e3, 6);
+        uint256 decayValue = log2Fixed(1 + x / 1e5, 6);
         uint256 price;
         if (auction.scalingFactor == 0) {
             price = auction.reservedPrice;
@@ -168,13 +167,13 @@ contract LogarithmReverseDutchAuction is Auction {
 
     function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline, 'Auction has ended');
+        require(block.timestamp < auction.deadline || auction.winner==auction.auctioneer, 'Auction has ended');
         require(!auction.isClaimed, 'Auction has been settled');
         uint256 currentPrice = getCurrentPrice(auctionId);
         auction.winner = msg.sender;
         auction.availableFunds = currentPrice;
         auction.isClaimed = true;
-        receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
+        if(auction.auctioneer != auction.winner) receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
         emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
