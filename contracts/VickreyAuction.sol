@@ -116,8 +116,8 @@ contract VickreyAuction is Auction {
         uint256 highestBid = bids[auctionId][auction.winner];
         receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
         if (highestBid < bidAmount) {
-            if (highestBid > 0) {
-                sendFunds(false,auction.biddingToken, auction.winner,highestBid); //Refund the previous highest bidder
+            if (highestBid > 0 && auction.winner!=msg.sender) {
+                sendFunds(false,auction.biddingToken, auction.winner,highestBid); //Refund the previous highest bidder(not the auctioneer initially)
             }
             auction.availableFunds = highestBid;
             auction.winningBid = highestBid; //Previous highest bid is now the winning bid which will be paid by the winner

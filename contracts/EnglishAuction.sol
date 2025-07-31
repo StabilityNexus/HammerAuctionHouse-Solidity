@@ -110,8 +110,9 @@ contract EnglishAuction is Auction {
         receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
         if (auction.highestBid > 0) {
             sendFunds(false, auction.biddingToken, auction.winner, auction.highestBid);
+            bids[auctionId][auction.winner] = 0; //Refund the previous highest bidder
         }
-        bids[auctionId][msg.sender] = bidAmount;
+        bids[auctionId][msg.sender] += bidAmount;
         auction.highestBid = bids[auctionId][msg.sender];
         auction.winner = msg.sender;
         auction.availableFunds = bids[auctionId][msg.sender];
