@@ -26,7 +26,7 @@ contract LinearReverseDutchAuction is Auction {
         uint256 startingPrice;
         uint256 availableFunds;
         uint256 reservedPrice;
-        uint256 settle_price;
+        uint256 settlePrice;
         address winner;
         uint256 deadline;
         uint256 duration;
@@ -76,7 +76,7 @@ contract LinearReverseDutchAuction is Auction {
             startingPrice: startingPrice,
             availableFunds: 0,
             reservedPrice: reservedPrice,
-            settle_price: reservedPrice,
+            settlePrice: reservedPrice,
             winner: msg.sender,
             deadline: deadline,
             duration: duration,
@@ -87,7 +87,7 @@ contract LinearReverseDutchAuction is Auction {
 
     function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
-        if(block.timestamp >= auction.deadline) return auction.settle_price;
+        if(block.timestamp >= auction.deadline) return auction.settlePrice;
         require(!auction.isClaimed, 'Auction has ended');
         // price(t) = startingPrice - (((startingPrice - reservedPrice) * (timeElapsed)) / duration)
         return auction.startingPrice - (((auction.startingPrice - auction.reservedPrice) * (block.timestamp - (auction.deadline - auction.duration))) / auction.duration);
@@ -96,13 +96,18 @@ contract LinearReverseDutchAuction is Auction {
     //placeBid function is not required in this auction type as the price is determined by the auctioneer and the auctioneer can withdraw the item on placing the bid only
     function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require((block.timestamp < auction.deadline && msg.sender!=auction.auctioneer) || (auction.winner==auction.auctioneer && block.timestamp >= auction.deadline && msg.sender == auction.auctioneer), 'Not allowed to withdraw item');
+        if (block.timestamp < auction.deadline) {
+            require(msg.sender != auction.auctioneer, 'Auctioneer cannot buy during auction');
+        } else {
+            require(auction.winner == auction.auctioneer, 'Item already sold');
+            require(msg.sender == auction.auctioneer, 'Only auctioneer can withdraw unsold item');
+        }
         require(!auction.isClaimed, 'Auction has been settled');
         uint256 currentPrice = getCurrentPrice(auctionId);
         auction.winner = msg.sender;
         auction.availableFunds = currentPrice;
         auction.isClaimed = true;
-        auction.settle_price = currentPrice;
+        auction.settlePrice = currentPrice;
         if(auction.auctioneer != auction.winner) receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
         emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
