@@ -167,14 +167,8 @@ contract LogarithmicReverseDutchAuction is Auction {
         return price;
     }
 
-    function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
+    function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) validAccess(auctions[auctionId].auctioneer, auctions[auctionId].winner, auctions[auctionId].deadline){
         AuctionData storage auction = auctions[auctionId];
-        if (block.timestamp < auction.deadline) {
-            require(msg.sender != auction.auctioneer, 'Auctioneer cannot buy during auction');
-        } else {
-            require(auction.winner == auction.auctioneer, 'Item already sold');
-            require(msg.sender == auction.auctioneer, 'Only auctioneer can withdraw unsold item');
-        }
         require(!auction.isClaimed, 'Auction has been settled');
         uint256 currentPrice = getCurrentPrice(auctionId);
         auction.winner = msg.sender;

@@ -34,6 +34,16 @@ abstract contract Auction is IERC721Receiver {
         _;
     }
 
+    modifier validAccess(address auctioneer,address winner,uint256 deadline){
+        if (block.timestamp < deadline) {
+            require(msg.sender != auctioneer, 'Auctioneer cannot buy during auction');
+        } else {
+            require(winner == auctioneer, 'Item already sold');
+            require(msg.sender == auctioneer, 'Only auctioneer can withdraw unsold item');
+        }
+        _;
+    }
+
     function receiveFunds(bool isNFT, address token, address from, uint256 tokenIdOrAmount) internal {
         if (isNFT) {
              IERC721(token).safeTransferFrom(from, address(this), tokenIdOrAmount);
