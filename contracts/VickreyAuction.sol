@@ -69,7 +69,7 @@ contract VickreyAuction is Auction {
         uint256 bidCommitDuration,
         uint256 bidRevealDuration
     ) external validAuctionParams(name,auctionedToken,biddingToken) {
-        // require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day'); //setting minimum bid reveal threshold to 1 day //for testing only
+        require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day');
         require(bidCommitDuration > 0, 'Bid commit duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 bidCommitEnd = bidCommitDuration + block.timestamp;

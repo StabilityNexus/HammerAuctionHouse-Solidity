@@ -29,6 +29,7 @@ contract LogarithmicReverseDutchAuction is Auction {
         uint256 reservedPrice;
         uint256 decayFactor;
         uint256 scalingFactor;
+        uint256 settle_price;
         address winner;
         uint256 deadline;
         uint256 duration;
@@ -83,6 +84,7 @@ contract LogarithmicReverseDutchAuction is Auction {
             availableFunds: 0,
             reservedPrice: reservedPrice,
             decayFactor: decayFactor,
+            settle_price: reservedPrice,
             winner: msg.sender,
             deadline: deadline,
             duration: duration,
@@ -167,7 +169,7 @@ contract LogarithmicReverseDutchAuction is Auction {
 
     function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline || auction.winner==auction.auctioneer, 'Auction has ended');
+        require((block.timestamp < auction.deadline && msg.sender!=auction.auctioneer) || (auction.winner==auction.auctioneer && block.timestamp >= auction.deadline && msg.sender == auction.auctioneer), 'Not allowed to withdraw item');
         require(!auction.isClaimed, 'Auction has been settled');
         uint256 currentPrice = getCurrentPrice(auctionId);
         auction.winner = msg.sender;

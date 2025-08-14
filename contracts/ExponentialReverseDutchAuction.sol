@@ -33,6 +33,7 @@ contract ExponentialReverseDutchAuction is Auction {
         uint256 availableFunds;
         uint256 reservedPrice;
         uint256 decayFactor;
+        uint256 settle_price;
         address winner;
         uint256 deadline;
         uint256 duration;
@@ -86,6 +87,7 @@ contract ExponentialReverseDutchAuction is Auction {
             availableFunds: 0,
             reservedPrice: reservedPrice,
             decayFactor: decayFactor,
+            settle_price: reservedPrice,
             winner: msg.sender,
             deadline: deadline,
             duration: duration,
@@ -123,7 +125,8 @@ contract ExponentialReverseDutchAuction is Auction {
 
     function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
-        if(block.timestamp >= auction.deadline) return 0;
+        if(block.timestamp >= auction.deadline) return auction.settle_price;
+        
         require(!auction.isClaimed, 'Auction has ended');
         uint256 timeElapsed = block.timestamp - (auction.deadline - auction.duration);
         uint256 x = timeElapsed * auction.decayFactor;
@@ -134,11 +137,12 @@ contract ExponentialReverseDutchAuction is Auction {
     //placeBid function is not required in this auction type as the price is determined by the auctioneer and the auctioneer can withdraw the item on placing the bid only
     function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline || auction.winner==auction.auctioneer, 'Auction has ended');
+        require((block.timestamp < auction.deadline && msg.sender!=auction.auctioneer) || (auction.winner==auction.auctioneer && block.timestamp >= auction.deadline && msg.sender == auction.auctioneer), 'Not allowed to withdraw item');
         require(!auction.isClaimed, 'Auction has been settled');
         uint256 currentPrice = getCurrentPrice(auctionId);
         auction.winner = msg.sender;
         auction.availableFunds = currentPrice;
+        auction.settle_price = currentPrice;
         auction.isClaimed = true;
         if(auction.auctioneer != auction.winner) receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
