@@ -111,7 +111,7 @@ contract AllPayAuction is Auction {
         auction.availableFunds += bidAmount;
         auction.deadline += auction.deadlineExtension;
         receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
-        emit bidPlaced(auctionId, msg.sender, bidAmount);
+        emit bidPlaced(auctionId, msg.sender, bids[auctionId][msg.sender]);
     }
 
     function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {

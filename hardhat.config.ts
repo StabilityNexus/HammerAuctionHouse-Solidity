@@ -22,6 +22,10 @@ const config: HardhatUserConfig = {
             url: 'https://rpc.ankr.com/eth_holesky',
             accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
         },
+        mordor: {
+            url: 'https://rpc.mordor.etccooperative.org',
+            accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+        }
     },
 };
 

@@ -107,16 +107,17 @@ contract EnglishAuction is Auction {
         require(bidAmount > 0, 'Bid amount should be greater than zero');
         require(auction.highestBid != 0 || bids[auctionId][msg.sender] + bidAmount >= auction.startingBid, 'First bid should be greater than starting bid');
         require(auction.highestBid == 0 || bids[auctionId][msg.sender] + bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
+        receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
+        if (auction.highestBid > 0) {
+            sendFunds(false, auction.biddingToken, auction.winner, auction.highestBid);
+            bids[auctionId][auction.winner] = 0; //Refund the previous highest bidder
+        }
         bids[auctionId][msg.sender] += bidAmount;
         auction.highestBid = bids[auctionId][msg.sender];
         auction.winner = msg.sender;
         auction.availableFunds = bids[auctionId][msg.sender];
         auction.deadline += auction.deadlineExtension;
-        receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
-        if (auction.highestBid > 0) {
-            sendFunds(false, auction.biddingToken, auction.winner, auction.highestBid);
-        }
-        emit bidPlaced(auctionId, msg.sender, bidAmount);
+        emit bidPlaced(auctionId, msg.sender, bids[auctionId][msg.sender]);
     }
 
     function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {
