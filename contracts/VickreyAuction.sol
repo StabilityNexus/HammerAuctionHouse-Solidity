@@ -69,7 +69,7 @@ contract VickreyAuction is Auction {
         uint256 bidCommitDuration,
         uint256 bidRevealDuration,
         uint256 commitFee
-    ) external validAuctionParams(name,auctionedToken,biddingToken) {
+    ) external validateAuctionCoreParams(name,auctionedToken,biddingToken) {
         require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day');
         require(bidCommitDuration > 0, 'Bid commit duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
@@ -98,7 +98,7 @@ contract VickreyAuction is Auction {
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd);
     }
 
-    function commitBid(uint256 auctionId, bytes32 commitment) external payable validAuctionId(auctionId) {
+    function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp < auction.bidCommitEnd, 'The commiting phase has ended!');
         require(commitments[auctionId][msg.sender] == bytes32(0), 'The sender has already commited');
@@ -107,7 +107,7 @@ contract VickreyAuction is Auction {
         commitments[auctionId][msg.sender] = commitment;
     }
 
-    function revealBid(uint256 auctionId, uint256 bidAmount, bytes32 salt) external validAuctionId(auctionId) {
+    function revealBid(uint256 auctionId, uint256 bidAmount, bytes32 salt) external exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp < auction.bidRevealEnd, 'The revealing phase has ended!');
         require(block.timestamp > auction.bidCommitEnd, 'The commiting phase has not ended yet!');
@@ -137,23 +137,23 @@ contract VickreyAuction is Auction {
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
-    function withdraw(uint256 auctionId) external validAuctionId(auctionId) {
+    function withdraw(uint256 auctionId) external exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp > auction.bidRevealEnd, "Reveal period hasn't ended yet");
         uint256 withdrawAmount = auction.availableFunds;
         require(withdrawAmount > 0, 'No funds available');
         auction.availableFunds = 0;
         sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount);
-        emit fundsWithdrawn(auctionId, withdrawAmount);
+        emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function claim(uint256 auctionId) external validAuctionId(auctionId) {
+    function claim(uint256 auctionId) external exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp > auction.bidRevealEnd, 'Reveal period has not ended yet');
         require(!auction.isClaimed, 'Auction had been settled');
         auction.isClaimed = true;
         if(auction.winner!=auction.auctioneer) sendFunds(false, auction.biddingToken, auction.winner, bids[auctionId][auction.winner] - auction.winningBid);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
-        emit itemWithdrawn(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
+        emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }

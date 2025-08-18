@@ -18,28 +18,33 @@ abstract contract Auction is IERC721Receiver {
         Token
     }
     
-    event fundsWithdrawn(uint256 indexed auctionId, uint256 amountWithdrawn);
-    event itemWithdrawn(uint256 indexed auctionId, address withdrawer, address auctionedTokenAddress, uint256 auctionedTokenIdOrAmount);
+    event Withdrawn(uint256 indexed auctionId, uint256 amountWithdrawn);
+    event Claimed(uint256 indexed auctionId, address withdrawer, address auctionedTokenAddress, uint256 auctionedTokenIdOrAmount);
     event bidPlaced(uint256 indexed auctionId, address bidder, uint256 bidAmount);
 
-    modifier validAuctionId(uint256 auctionId) {
+    modifier exists(uint256 auctionId) {
         require(auctionId < auctionCounter, 'Invalid auctionId');
         _;
     }
 
-    modifier validAuctionParams(string memory name,address auctionedToken,address biddingToken){
+    modifier validateAuctionCoreParams(string memory name,address auctionedToken,address biddingToken){
         require(bytes(name).length > 0, 'Name must be present');
         require(auctionedToken != address(0), 'Auctioned token address must be provided');
         require(biddingToken != address(0), 'Bidding token address must be provided');
         _;
     }
 
-    modifier validAccess(address auctioneer,address winner,uint256 deadline){
+    modifier validAccess(address auctioneer,uint256 deadline){
         if (block.timestamp < deadline) {
             require(msg.sender != auctioneer, 'Auctioneer cannot buy during auction');
         } else {
             require(msg.sender == auctioneer, 'Only auctioneer can withdraw unsold item');
         }
+        _;
+    }
+
+    modifier onlyBeforeDeadline(address auctioneer,uint256 deadline){
+        require(block.timestamp < deadline || msg.sender==auctioneer, 'Auction has ended');
         _;
     }
 
