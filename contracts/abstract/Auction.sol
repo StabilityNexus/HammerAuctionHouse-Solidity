@@ -38,7 +38,6 @@ abstract contract Auction is IERC721Receiver {
         if (block.timestamp < deadline) {
             require(msg.sender != auctioneer, 'Auctioneer cannot buy during auction');
         } else {
-            require(winner == auctioneer, 'Item already sold');
             require(msg.sender == auctioneer, 'Only auctioneer can withdraw unsold item');
         }
         _;

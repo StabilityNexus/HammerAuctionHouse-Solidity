@@ -10,15 +10,13 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * @title ExponentialReverseDutchAuction
  * @notice Auction contract for NFT and token auctions, where price decreases exponentially over time from starting price to reserve price.
  * The first bidder to meet the current price wins the auction.
- * price(t) = reservedPrice + (startingPrice - reservedPrice) * 2^(-timeElapsed*decayFactor)
+ * price(t) = minPrice + (startingPrice - minPrice) * 2^(-timeElapsed*decayFactor)
  */
 contract ExponentialReverseDutchAuction is Auction {
     mapping(uint256 => AuctionData) public auctions;
-
     uint256[61] private decayLookup = [1000000000000000000,500000000000000000,250000000000000000,125000000000000000,62500000000000000,31250000000000000,15625000000000000,7812500000000000,3906250000000000,1953125000000000,976562500000000,488281250000000,244140625000000,122070312500000,61035156250000,30517578125000,15258789062500,7629394531250,3814697265625,1907348632812,953674316406,476837158203,238418579102,119209289551,59604644775,29802322388,14901161194,7450580597,3725290298,1862645149,931322574,465661287,232830643,116415322,58207661,29103831,14551915,7275958,3637979,1818989,909495,454747,227373,113687,56843,28422,14211,7105,3553,1776,888,444,222,111,56,28,14,7,3,2,1
     ];
     // decayLookup table is formed by claculating 2^(-x) for x=0,1,2,...,61,scaled with 10^18 to ensure precision upto 18 decimal points
-
     struct AuctionData {
         uint256 id;
         string name;
@@ -31,7 +29,7 @@ contract ExponentialReverseDutchAuction is Auction {
         address biddingToken;
         uint256 startingPrice;
         uint256 availableFunds;
-        uint256 reservedPrice;
+        uint256 minPrice;
         uint256 decayFactor;
         uint256 settlePrice;
         address winner;
@@ -50,7 +48,7 @@ contract ExponentialReverseDutchAuction is Auction {
         uint256 auctionedTokenIdOrAmount,
         address biddingToken,
         uint256 startingPrice,
-        uint256 reservedPrice,
+        uint256 minPrice,
         uint256 decayFactor,
         uint256 deadline
     );
@@ -64,11 +62,11 @@ contract ExponentialReverseDutchAuction is Auction {
         uint256 auctionedTokenIdOrAmount,
         address biddingToken,
         uint256 startingPrice,
-        uint256 reservedPrice,
+        uint256 minPrice,
         uint256 decayFactor,
         uint256 duration
     ) external validAuctionParams(name,auctionedToken,biddingToken) {
-        require(startingPrice >= reservedPrice, 'Starting price should be higher than reserved price');
+        require(startingPrice >= minPrice, 'Starting price should be higher than reserved price');
         require(duration > 0, 'Duration must be greater than zero seconds');
         //decay Factor is scaled with 10^5 to ensure precision upto three decimal points
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount); 
@@ -85,9 +83,9 @@ contract ExponentialReverseDutchAuction is Auction {
             biddingToken: biddingToken,
             startingPrice: startingPrice,
             availableFunds: 0,
-            reservedPrice: reservedPrice,
+            minPrice: minPrice,
             decayFactor: decayFactor,
-            settlePrice: reservedPrice,
+            settlePrice: minPrice,
             winner: msg.sender,
             deadline: deadline,
             duration: duration,
@@ -104,7 +102,7 @@ contract ExponentialReverseDutchAuction is Auction {
             auctionedTokenIdOrAmount,
             biddingToken,
             startingPrice,
-            reservedPrice,
+            minPrice,
             decayFactor,
             deadline
         );
@@ -131,30 +129,38 @@ contract ExponentialReverseDutchAuction is Auction {
         uint256 timeElapsed = block.timestamp - (auction.deadline - auction.duration);
         uint256 x = timeElapsed * auction.decayFactor;
         uint256 decayValue = getDecayValue(x);
-        return auction.reservedPrice + ((auction.startingPrice - auction.reservedPrice) * decayValue) / 1e18;
+        return auction.minPrice + ((auction.startingPrice - auction.minPrice) * decayValue) / 1e18;
     }
 
-    function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) validAccess(auctions[auctionId].auctioneer, auctions[auctionId].winner, auctions[auctionId].deadline) {
-        AuctionData storage auction = auctions[auctionId];
-        require(!auction.isClaimed, 'Auction has been settled');
-        uint256 currentPrice = getCurrentPrice(auctionId);
-        auction.winner = msg.sender;
-        auction.availableFunds = currentPrice;
-        auction.settlePrice = currentPrice;
-        auction.isClaimed = true;
-        if(auction.auctioneer != auction.winner) receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
-        emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
-    }
 
-    function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {
+    function withdraw(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(msg.sender == auctions[auctionId].auctioneer, 'Not auctioneer!');
         uint256 withdrawAmount = auction.availableFunds;
         require(withdrawAmount > 0, 'No funds available');
         require(block.timestamp >= auction.deadline || auction.isClaimed, 'Auction is still ongoing');
         auction.availableFunds = 0;
-        sendFunds(false, auction.biddingToken, msg.sender, withdrawAmount);
+        sendFunds(false, auction.biddingToken,auction.auctioneer, withdrawAmount);
         emit fundsWithdrawn(auctionId, withdrawAmount);
     }
+    
+    function bid(uint256 auctionId) external validAuctionId(auctionId) validAccess(auctions[auctionId].auctioneer, auctions[auctionId].winner, auctions[auctionId].deadline) {
+        AuctionData storage auction = auctions[auctionId];
+        require(!auction.isClaimed, 'Auction is already settled');
+        auction.isClaimed = true;
+        auction.winner = msg.sender;
+        if (auction.auctioneer != msg.sender) {
+            uint256 currentPrice = getCurrentPrice(auctionId);
+            receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
+            auction.availableFunds = currentPrice;
+            auction.settlePrice = currentPrice;
+        }
+        claim(auctionId);
+    }
+
+    function claim(uint256 auctionId) internal validAuctionId(auctionId) {
+        AuctionData storage auction = auctions[auctionId];
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
+        emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
+    }
+
 }

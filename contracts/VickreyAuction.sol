@@ -36,6 +36,7 @@ contract VickreyAuction is Auction {
         uint256 bidCommitEnd;
         uint256 bidRevealEnd;
         bool isClaimed;
+        uint256 commitFee;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -50,7 +51,6 @@ contract VickreyAuction is Auction {
         uint256 bidCommitEnd,
         uint256 bidRevealEnd
     );
-
     event BidRevealed(
         uint256 indexed auctionId,
         address indexed bidder,
@@ -67,7 +67,8 @@ contract VickreyAuction is Auction {
         address biddingToken,
         uint256 minBid,
         uint256 bidCommitDuration,
-        uint256 bidRevealDuration
+        uint256 bidRevealDuration,
+        uint256 commitFee
     ) external validAuctionParams(name,auctionedToken,biddingToken) {
         require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day');
         require(bidCommitDuration > 0, 'Bid commit duration must be greater than zero seconds');
@@ -91,7 +92,8 @@ contract VickreyAuction is Auction {
             startTime: block.timestamp,
             bidCommitEnd: bidCommitEnd,
             bidRevealEnd: bidRevealEnd,
-            isClaimed: false
+            isClaimed: false,
+            commitFee: commitFee
         });
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd);
     }
@@ -135,25 +137,23 @@ contract VickreyAuction is Auction {
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
-    function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {
+    function withdraw(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(msg.sender == auctions[auctionId].auctioneer, 'Not auctioneer!');
         require(block.timestamp > auction.bidRevealEnd, "Reveal period hasn't ended yet");
         uint256 withdrawAmount = auction.availableFunds;
         require(withdrawAmount > 0, 'No funds available');
         auction.availableFunds = 0;
-        sendFunds(false, auction.biddingToken, msg.sender, withdrawAmount);
+        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount);
         emit fundsWithdrawn(auctionId, withdrawAmount);
     }
 
-    function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
+    function claim(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(msg.sender == auction.winner, 'Not auction winner');
         require(block.timestamp > auction.bidRevealEnd, 'Reveal period has not ended yet');
         require(!auction.isClaimed, 'Auction had been settled');
         auction.isClaimed = true;
-        if(msg.sender!=auction.auctioneer) sendFunds(false, auction.biddingToken, msg.sender, bids[auctionId][msg.sender] - auction.winningBid);
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
+        if(auction.winner!=auction.auctioneer) sendFunds(false, auction.biddingToken, auction.winner, bids[auctionId][auction.winner] - auction.winningBid);
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit itemWithdrawn(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }

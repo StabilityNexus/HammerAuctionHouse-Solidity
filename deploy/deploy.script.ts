@@ -13,9 +13,9 @@ const CONTRACT_TO_DEPLOY = 'AllPayAuction';
 
 async function main() {
     const [deployer] = await ethers.getSigners();
-    
+
     //Replace 'auctionName' with the actual contract name you want to deploy
-    const auctionName = "auctionName"; 
+    const auctionName = "AllPayAuction";
     const Contract = await ethers.getContractFactory(auctionName);
     const contract = await Contract.deploy();
 

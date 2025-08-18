@@ -48,7 +48,6 @@ contract EnglishAuction is Auction {
         uint256 deadlineExtension
     );
 
-
     function createAuction(
         string memory name,
         string memory description,
@@ -101,7 +100,7 @@ contract EnglishAuction is Auction {
         );
     }
 
-    function placeBid(uint256 auctionId, uint256 bidAmount) external validAuctionId(auctionId) {
+    function bid(uint256 auctionId, uint256 bidAmount) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp < auction.deadline, 'Auction has ended');
         require(bidAmount > 0, 'Bid amount should be greater than zero');
@@ -120,24 +119,22 @@ contract EnglishAuction is Auction {
         emit bidPlaced(auctionId, msg.sender, bids[auctionId][msg.sender]);
     }
 
-    function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {
+    function withdraw(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(msg.sender == auctions[auctionId].auctioneer, 'Not auctioneer!');
         uint256 withdrawAmount = auction.availableFunds;
         require(withdrawAmount > 0, 'No funds available');
         require(block.timestamp > auction.deadline, 'Auction has not ended yet');
         auction.availableFunds = 0;
-        sendFunds(false, auction.biddingToken, msg.sender, withdrawAmount);
+        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount);
         emit fundsWithdrawn(auctionId, withdrawAmount);
     }
 
-    function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
+    function claim(uint256 auctionId) external validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        require(msg.sender == auction.winner, 'Not auction winner');
         require(block.timestamp > auction.deadline, 'Auction has not ended yet');
         require(!auction.isClaimed, 'Auction had been settled');
         auction.isClaimed = true;
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit itemWithdrawn(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }
