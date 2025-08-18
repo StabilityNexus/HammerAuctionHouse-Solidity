@@ -102,7 +102,7 @@ contract VickreyAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp < auction.bidCommitEnd, 'The commiting phase has ended!');
         require(commitments[auctionId][msg.sender] == bytes32(0), 'The sender has already commited');
-        require(msg.value == 1000000000000000, 'Commit fee must be exactly 0.001 ETH'); // require exact fee
+        require(msg.value == auction.commitFee, 'Insufficient commit fee'); // require exact fee
         require(auction.auctioneer != msg.sender, 'Auctioneer cannot commit to bid');
         commitments[auctionId][msg.sender] = commitment;
     }
@@ -132,8 +132,8 @@ contract VickreyAuction is Auction {
         } else {
             sendFunds(false, auction.biddingToken, msg.sender, bidAmount); //Not the highest bidder, refund the bid amount
         }
-        (bool success, ) = msg.sender.call{value: 1000000000000000}(''); //Refund exactly 0.001 ETH
-        require(success, 'Transfer failed');
+        (bool success, ) = msg.sender.call{value: auction.commitFee}(''); //Refund commit fee
+        require(success, 'Refund failed');
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
