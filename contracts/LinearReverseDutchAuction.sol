@@ -59,7 +59,7 @@ contract LinearReverseDutchAuction is Auction {
         uint256 minPrice,
         uint256 duration
     ) external validAuctionParams(name,auctionedToken,biddingToken) {
-        require(startingPrice >= minPrice, 'Starting price should be higher than reserved price');
+        require(startingPrice >= minPrice, 'Starting price should be higher than minimum price');
         require(duration > 0, 'Duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;
@@ -88,7 +88,6 @@ contract LinearReverseDutchAuction is Auction {
     function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
         if(block.timestamp >= auction.deadline) return auction.settlePrice;
-        require(!auction.isClaimed, 'Auction has ended');
         // price(t) = startingPrice - (((startingPrice - minPrice) * (timeElapsed)) / duration)
         return auction.startingPrice - (((auction.startingPrice - auction.minPrice) * (block.timestamp - (auction.deadline - auction.duration))) / auction.duration);
     }
@@ -120,7 +119,7 @@ contract LinearReverseDutchAuction is Auction {
 
     function claim(uint256 auctionId) internal validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
-        emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        emit itemWithdrawn(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }

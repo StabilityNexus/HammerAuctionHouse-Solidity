@@ -64,7 +64,7 @@ contract LogarithmicReverseDutchAuction is Auction {
         uint256 decayFactor,
         uint256 duration
     ) external validAuctionParams(name, auctionedToken, biddingToken) {
-        require(startingPrice >= minPrice, 'Starting price should be higher than reserved price');
+        require(startingPrice >= minPrice, 'Starting price should be higher than minimum price');
         require(duration > 0, 'Duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;
@@ -148,8 +148,7 @@ contract LogarithmicReverseDutchAuction is Auction {
 
     function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
-        if(block.timestamp >= auction.deadline) return 0;
-        require(!auction.isClaimed, 'Auction has ended');
+        if(block.timestamp >= auction.deadline) return auction.settlePrice;
         uint256 timeElapsed = block.timestamp - (auction.deadline - auction.duration);
         uint256 x = timeElapsed * auction.decayFactor;
         uint256 decayValue = log2Fixed(1 + x / 1e5, 6);

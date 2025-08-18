@@ -8,7 +8,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
 /**
  * @title ExponentialReverseDutchAuction
- * @notice Auction contract for NFT and token auctions, where price decreases exponentially over time from starting price to reserve price.
+ * @notice Auction contract for NFT and token auctions, where price decreases exponentially over time from starting price to minimum price.
  * The first bidder to meet the current price wins the auction.
  * price(t) = minPrice + (startingPrice - minPrice) * 2^(-timeElapsed*decayFactor)
  */
@@ -66,7 +66,7 @@ contract ExponentialReverseDutchAuction is Auction {
         uint256 decayFactor,
         uint256 duration
     ) external validAuctionParams(name,auctionedToken,biddingToken) {
-        require(startingPrice >= minPrice, 'Starting price should be higher than reserved price');
+        require(startingPrice >= minPrice, 'Starting price should be higher than minimum price');
         require(duration > 0, 'Duration must be greater than zero seconds');
         //decay Factor is scaled with 10^5 to ensure precision upto three decimal points
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount); 
@@ -124,8 +124,6 @@ contract ExponentialReverseDutchAuction is Auction {
     function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
         if(block.timestamp >= auction.deadline) return auction.settlePrice;
-        
-        require(!auction.isClaimed, 'Auction has ended');
         uint256 timeElapsed = block.timestamp - (auction.deadline - auction.duration);
         uint256 x = timeElapsed * auction.decayFactor;
         uint256 decayValue = getDecayValue(x);
@@ -159,8 +157,8 @@ contract ExponentialReverseDutchAuction is Auction {
 
     function claim(uint256 auctionId) internal validAuctionId(auctionId) {
         AuctionData storage auction = auctions[auctionId];
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
-        emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        emit itemWithdrawn(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 
 }
