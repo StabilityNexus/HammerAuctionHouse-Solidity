@@ -60,7 +60,7 @@ contract AllPayAuction is Auction {
         uint256 minBidDelta,
         uint256 duration,
         uint256 deadlineExtension
-    ) external validateAuctionCoreParams(name,auctionedToken,biddingToken) {
+    ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
         require(duration > 0, 'Duration should be greater than 0');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;
