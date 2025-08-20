@@ -125,7 +125,6 @@ contract EnglishAuction is Auction {
     function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
-        require(withdrawAmount > 0, 'No funds available');
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
