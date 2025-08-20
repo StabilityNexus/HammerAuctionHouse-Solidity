@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import './abstract/Auction.sol';
+import './ProtocolParameters.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
@@ -12,6 +13,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * The first bidder to meet the current price wins the auction.
  */
 contract LinearReverseDutchAuction is Auction {
+    constructor (address _protocolParametersAddress) Auction(_protocolParametersAddress){}
     mapping(uint256 => AuctionData) public auctions;
     struct AuctionData {
         uint256 id;
@@ -31,6 +33,7 @@ contract LinearReverseDutchAuction is Auction {
         uint256 deadline;
         uint256 duration;
         bool isClaimed;
+        uint256 protocolFee;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -80,7 +83,8 @@ contract LinearReverseDutchAuction is Auction {
             winner: msg.sender,
             deadline: deadline,
             duration: duration,
-            isClaimed: false
+            isClaimed: false,
+            protocolFee: ProtocolParameters(protocolParametersAddress).protocolFeeRate()
         });
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, minPrice, deadline);
     }
@@ -96,7 +100,10 @@ contract LinearReverseDutchAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
-        sendFunds(false, auction.biddingToken,auction.auctioneer, withdrawAmount);
+        uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
+        address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
+        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendFunds(false, auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
     

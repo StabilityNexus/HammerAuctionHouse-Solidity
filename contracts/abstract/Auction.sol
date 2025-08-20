@@ -13,6 +13,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  */
 abstract contract Auction is IERC721Receiver {
     uint256 public auctionCounter = 0;
+    address public protocolParametersAddress;
     enum AuctionType {
         NFT,
         Token
@@ -45,6 +46,10 @@ abstract contract Auction is IERC721Receiver {
     modifier notClaimed(bool isClaimed){
         require(!isClaimed, "Auctioned assest has already been claimed");
         _;
+    }
+
+    constructor(address _protocolParemetersAddress) nonZeroAddress(_protocolParemetersAddress) {
+        protocolParametersAddress = _protocolParemetersAddress;
     }
 
     function receiveFunds(bool isNFT, address token, address from, uint256 tokenIdOrAmount) internal {

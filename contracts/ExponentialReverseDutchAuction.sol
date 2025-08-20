@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import './abstract/Auction.sol';
+import './ProtocolParameters.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
@@ -13,6 +14,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * price(t) = minPrice + (startingPrice - minPrice) * 2^(-timeElapsed*decayFactor)
  */
 contract ExponentialReverseDutchAuction is Auction {
+    constructor (address _protocolParametersAddress) Auction(_protocolParametersAddress){}
     mapping(uint256 => AuctionData) public auctions;
     uint256[61] private decayLookup = [1000000000000000000,500000000000000000,250000000000000000,125000000000000000,62500000000000000,31250000000000000,15625000000000000,7812500000000000,3906250000000000,1953125000000000,976562500000000,488281250000000,244140625000000,122070312500000,61035156250000,30517578125000,15258789062500,7629394531250,3814697265625,1907348632812,953674316406,476837158203,238418579102,119209289551,59604644775,29802322388,14901161194,7450580597,3725290298,1862645149,931322574,465661287,232830643,116415322,58207661,29103831,14551915,7275958,3637979,1818989,909495,454747,227373,113687,56843,28422,14211,7105,3553,1776,888,444,222,111,56,28,14,7,3,2,1
     ];
@@ -36,6 +38,7 @@ contract ExponentialReverseDutchAuction is Auction {
         uint256 deadline;
         uint256 duration;
         bool isClaimed;
+        uint256 protocolFee;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -89,7 +92,8 @@ contract ExponentialReverseDutchAuction is Auction {
             winner: msg.sender,
             deadline: deadline,
             duration: duration,
-            isClaimed: false
+            isClaimed: false,
+            protocolFee: ProtocolParameters(protocolParametersAddress).protocolFeeRate()
         });
         emit AuctionCreated(
             auctionCounter++,
@@ -134,7 +138,10 @@ contract ExponentialReverseDutchAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
-        sendFunds(false, auction.biddingToken,auction.auctioneer, withdrawAmount);
+        uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
+        address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
+        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendFunds(false, auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
     

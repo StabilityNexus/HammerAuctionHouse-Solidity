@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import './abstract/Auction.sol';
+import './ProtocolParameters.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
@@ -11,6 +12,7 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
  * @notice Auction contract for NFT and token auctions,where all bidders pay their bid amount but only the highest bidder wins the auction.
  */
 contract AllPayAuction is Auction {
+    constructor (address _protocolParametersAddress) Auction(_protocolParametersAddress){}
     mapping(uint256 => AuctionData) public auctions; // auctionId => AuctionData
     mapping(uint256 => mapping(address => uint256)) public bids; // auctionId => (bidder => bidAmount)
     struct AuctionData {
@@ -31,6 +33,7 @@ contract AllPayAuction is Auction {
         uint256 deadline;
         uint256 deadlineExtension;
         bool isClaimed;
+        uint256 protocolFee;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -81,7 +84,8 @@ contract AllPayAuction is Auction {
             winner: msg.sender, //Initially set to auctioneer,to ensure that auctioneer can withdraw funds in case of no bids
             deadline: deadline,
             deadlineExtension: deadlineExtension,
-            isClaimed: false
+            isClaimed: false,
+            protocolFee: ProtocolParameters(protocolParametersAddress).protocolFeeRate()
         });
         emit AuctionCreated(
             auctionCounter++, //increment auctionCounter after creating the auction
@@ -119,7 +123,10 @@ contract AllPayAuction is Auction {
         uint256 withdrawAmount = auction.availableFunds;
         require(withdrawAmount > 0, 'No funds available');
         auction.availableFunds = 0;
-        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount);
+        uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
+        address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
+        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendFunds(false, auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
