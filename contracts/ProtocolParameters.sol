@@ -15,7 +15,7 @@ contract ProtocolParameters {
     }
 
     modifier lessThan5Percent(uint256 feeRate){
-        require(feeRate <= 500, "Fee rate must be between 0 and 500 (in basis points)");
+        require(feeRate <= 500, "Fee rate must be between 0 and 500"); //0 to 5% , rate = 0.0001 * _protocolFeeRate;
         _;
     }
 
@@ -24,9 +24,7 @@ contract ProtocolParameters {
         _;
     }
 
-    constructor(address _protocolFeeRecipient, uint256 _protocolFeeRate){
-        require(_protocolFeeRecipient != address(0), "Invalid fee recipient address");
-        require(_protocolFeeRate <= 500, "Fee rate must be between 0 and 500 (in basis points)"); //0 to 5% , rate = 0.0001 * _protocolFeeRate;
+    constructor(address _protocolFeeRecipient, uint256 _protocolFeeRate) nonZeroAddress(_protocolFeeRecipient) lessThan5Percent(_protocolFeeRate) {
         protocolFeeRecipient = _protocolFeeRecipient;
         protocolFeeRate = _protocolFeeRate;
     }

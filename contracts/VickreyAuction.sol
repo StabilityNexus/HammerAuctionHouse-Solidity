@@ -104,9 +104,8 @@ contract VickreyAuction is Auction {
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd);
     }
 
-    function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) {
+    function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) withinDeadline(auctions[auctionId].bidCommitEnd) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.bidCommitEnd, 'The commiting phase has ended!');
         require(commitments[auctionId][msg.sender] == bytes32(0), 'The sender has already commited');
         require(msg.value == auction.commitFee, 'Insufficient commit fee'); // require exact fee
         require(auction.auctioneer != msg.sender, 'Auctioneer cannot commit to bid');
@@ -114,10 +113,8 @@ contract VickreyAuction is Auction {
         auction.accumulatedCommitFee += msg.value;
     }
 
-    function revealBid(uint256 auctionId, uint256 bidAmount, bytes32 salt) external exists(auctionId) {
+    function revealBid(uint256 auctionId, uint256 bidAmount, bytes32 salt) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidCommitEnd) withinDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.bidRevealEnd, 'The revealing phase has ended!');
-        require(block.timestamp > auction.bidCommitEnd, 'The commiting phase has not ended yet!');
         require(commitments[auctionId][msg.sender] != bytes32(0), "The sender hadn't commited during commiting phase");
         bytes32 check = keccak256(abi.encodePacked(bidAmount, salt));
         require(check == commitments[auctionId][msg.sender], 'Invalid reveal');
@@ -145,15 +142,14 @@ contract VickreyAuction is Auction {
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
-    function withdraw(uint256 auctionId) external exists(auctionId) {
+    function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp > auction.bidRevealEnd, "Reveal period hasn't ended yet");
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
         sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendFunds(false, auction.biddingToken,feeRecipient,fees);
+        sendFunds(false, auction.biddingToken, feeRecipient, fees);
         if(auction.accumulatedCommitFee != 0) {
             (bool success, ) = auction.auctioneer.call{value: auction.accumulatedCommitFee}('');
             require(success, 'Commit fee withdrawal failed');
@@ -162,12 +158,10 @@ contract VickreyAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function claim(uint256 auctionId) external exists(auctionId) {
+    function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp > auction.bidRevealEnd, 'Reveal period has not ended yet');
-        require(!auction.isClaimed, 'Auction had been settled');
         auction.isClaimed = true;
-        if(auction.winner!=auction.auctioneer) sendFunds(false, auction.biddingToken, auction.winner, bids[auctionId][auction.winner] - auction.winningBid);
+        if(bids[auctionId][auction.winner] != auction.winningBid) sendFunds(false, auction.biddingToken, auction.winner, bids[auctionId][auction.winner] - auction.winningBid);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }

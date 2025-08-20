@@ -48,6 +48,11 @@ abstract contract Auction is IERC721Receiver {
         _;
     }
 
+    modifier onlyAfterDeadline(uint256 deadline) {
+        require(block.timestamp >= deadline, 'Auction has not ended yet');
+        _;
+    }
+
     constructor(address _protocolParemetersAddress) nonZeroAddress(_protocolParemetersAddress) {
         protocolParametersAddress = _protocolParemetersAddress;
     }

@@ -104,24 +104,22 @@ contract AllPayAuction is Auction {
         );
     }
 
-    function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) {
+    function bid(uint256 auctionId, uint256 bidIncrement) external exists(auctionId) withinDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.deadline, 'Auction has ended');
-        require(auction.highestBid != 0 || bids[auctionId][msg.sender] + bidAmount >= auction.startingBid, 'First bid should be greater than starting bid');
-        require(auction.highestBid == 0 || bids[auctionId][msg.sender] + bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
-        bids[auctionId][msg.sender] += bidAmount;
+        require(auction.highestBid != 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.startingBid, 'First bid should be greater than starting bid');
+        require(auction.highestBid == 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
+        bids[auctionId][msg.sender] += bidIncrement;
         auction.highestBid = bids[auctionId][msg.sender];
         auction.winner = msg.sender;
-        auction.availableFunds += bidAmount;
+        auction.availableFunds += bidIncrement;
         auction.deadline += auction.deadlineExtension;
-        receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
+        receiveFunds(false, auction.biddingToken, msg.sender, bidIncrement);
         emit bidPlaced(auctionId, msg.sender, bids[auctionId][msg.sender]);
     }
 
     function withdraw(uint256 auctionId) external exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
-        require(withdrawAmount > 0, 'No funds available');
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
@@ -130,10 +128,8 @@ contract AllPayAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function claim(uint256 auctionId) external exists(auctionId) {
+    function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp > auction.deadline, 'Auction has not ended yet');
-        require(!auction.isClaimed, 'Auction had been settled');
         auction.isClaimed = true;
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
