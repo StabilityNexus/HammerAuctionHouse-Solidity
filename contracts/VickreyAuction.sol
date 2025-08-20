@@ -40,6 +40,7 @@ contract VickreyAuction is Auction {
         bool isClaimed;
         uint256 commitFee;
         uint256 protocolFee;
+        uint256 accumulatedCommitFee;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -97,7 +98,8 @@ contract VickreyAuction is Auction {
             bidRevealEnd: bidRevealEnd,
             isClaimed: false,
             commitFee: commitFee,
-            protocolFee: ProtocolParameters(protocolParametersAddress).protocolFeeRate()
+            protocolFee: ProtocolParameters(protocolParametersAddress).protocolFeeRate(),
+            accumulatedCommitFee: 0
         });
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd);
     }
@@ -109,6 +111,7 @@ contract VickreyAuction is Auction {
         require(msg.value == auction.commitFee, 'Insufficient commit fee'); // require exact fee
         require(auction.auctioneer != msg.sender, 'Auctioneer cannot commit to bid');
         commitments[auctionId][msg.sender] = commitment;
+        auction.accumulatedCommitFee += msg.value;
     }
 
     function revealBid(uint256 auctionId, uint256 bidAmount, bytes32 salt) external exists(auctionId) {
@@ -138,6 +141,7 @@ contract VickreyAuction is Auction {
         }
         (bool success, ) = msg.sender.call{value: auction.commitFee}(''); //Refund commit fee
         require(success, 'Refund failed');
+        auction.accumulatedCommitFee -= auction.commitFee;
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
@@ -150,6 +154,11 @@ contract VickreyAuction is Auction {
         address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
         sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendFunds(false, auction.biddingToken,feeRecipient,fees);
+        if(auction.accumulatedCommitFee != 0) {
+            (bool success, ) = auction.auctioneer.call{value: auction.accumulatedCommitFee}('');
+            require(success, 'Commit fee withdrawal failed');
+            auction.accumulatedCommitFee = 0; 
+        }
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
