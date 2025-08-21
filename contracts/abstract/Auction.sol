@@ -44,7 +44,7 @@ abstract contract Auction is IERC721Receiver {
     }
 
     modifier notClaimed(bool isClaimed){
-        require(!isClaimed, "Auctioned assest has already been claimed");
+        require(!isClaimed, "Auctioned asset has already been claimed");
         _;
     }
 
@@ -53,8 +53,8 @@ abstract contract Auction is IERC721Receiver {
         _;
     }
 
-    constructor(address _protocolParemetersAddress) nonZeroAddress(_protocolParemetersAddress) {
-        protocolParametersAddress = _protocolParemetersAddress;
+    constructor(address _protocolParametersAddress) nonZeroAddress(_protocolParametersAddress) {
+        protocolParametersAddress = _protocolParametersAddress;
     }
 
     function receiveFunds(bool isNFT, address token, address from, uint256 tokenIdOrAmount) internal {

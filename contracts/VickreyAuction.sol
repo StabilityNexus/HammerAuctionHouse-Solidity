@@ -12,7 +12,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * @notice Auction contract for NFT and token auctions, where bidders commit to a hidden bid amount and reveal it later.
  * The highest bidder wins the auction and pays the second-highest bid.
  * The rest of the bidders get their bid amount refunded.
- * During the commit phase, bidders can commit to a bid amount using a hash of the bid and a salt,along with a fees of 0.001eth.
+ * During the commit phase, bidders can commit to a bid amount using a hash of the bid and a salt,along with a commit fee.
  * During the reveal phase, bidders reveal their bid amount and salt,and makes the bid transfer.On correct reveal,the fees is refunded.
  */
 

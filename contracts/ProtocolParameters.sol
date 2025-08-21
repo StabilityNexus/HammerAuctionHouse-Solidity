@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 /**
  * @title ProtocolParameters
- * @notice This contract defines the protocol fees and address in which that fees will be recieved.
+ * @notice This contract defines the protocol fees and address in which that fees will be received.
  */
 contract ProtocolParameters {
     address public protocolFeeRecipient;
