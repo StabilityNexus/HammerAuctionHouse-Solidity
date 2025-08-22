@@ -51,7 +51,8 @@ contract LogarithmicReverseDutchAuction is Auction {
         uint256 startingPrice,
         uint256 minPrice,
         uint256 decayFactor,
-        uint256 deadline
+        uint256 deadline,
+        uint256 protocolFee
     );
 
     function createAuction(
@@ -93,7 +94,7 @@ contract LogarithmicReverseDutchAuction is Auction {
             duration: duration,
             scalingFactor: scalingFactor,
             isClaimed: false,
-            protocolFee: ProtocolParameters(protocolParametersAddress).protocolFeeRate()
+            protocolFee: protocolParameters.fee()
         });
         emit AuctionCreated(
             auctionCounter++,
@@ -108,7 +109,8 @@ contract LogarithmicReverseDutchAuction is Auction {
             startingPrice,
             minPrice,
             decayFactor,
-            deadline
+            deadline,
+            protocolParameters.fee()
         );
     }
 
@@ -175,13 +177,13 @@ contract LogarithmicReverseDutchAuction is Auction {
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
-        address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
+        address feeRecipient = protocolParameters.treasury();
         sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendFunds(false, auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
     
-    function bid(uint256 auctionId) external exists(auctionId) withinDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);

@@ -48,7 +48,8 @@ contract AllPayAuction is Auction {
         uint256 startingBid,
         uint256 minBidDelta,
         uint256 deadline,
-        uint256 deadlineExtension
+        uint256 deadlineExtension,
+        uint256 protocolFee
     );
 
     function createAuction(
@@ -85,7 +86,7 @@ contract AllPayAuction is Auction {
             deadline: deadline,
             deadlineExtension: deadlineExtension,
             isClaimed: false,
-            protocolFee: ProtocolParameters(protocolParametersAddress).protocolFeeRate()
+            protocolFee: protocolParameters.fee()
         });
         emit AuctionCreated(
             auctionCounter++, //increment auctionCounter after creating the auction
@@ -100,11 +101,12 @@ contract AllPayAuction is Auction {
             startingBid,
             minBidDelta,
             deadline,
-            deadlineExtension
+            deadlineExtension,
+            protocolParameters.fee()
         );
     }
 
-    function bid(uint256 auctionId, uint256 bidIncrement) external exists(auctionId) withinDeadline(auctions[auctionId].deadline) {
+    function bid(uint256 auctionId, uint256 bidIncrement) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
         require(auction.highestBid != 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.startingBid, 'First bid should be greater than starting bid');
         require(auction.highestBid == 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
@@ -122,7 +124,7 @@ contract AllPayAuction is Auction {
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
-        address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
+        address feeRecipient = protocolParameters.treasury();
         sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendFunds(false, auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);

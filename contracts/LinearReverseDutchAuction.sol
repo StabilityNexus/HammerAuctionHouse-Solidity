@@ -13,7 +13,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * The first bidder to meet the current price wins the auction.
  */
 contract LinearReverseDutchAuction is Auction {
-    constructor (address _protocolParametersAddress) Auction(_protocolParametersAddress){}
+    constructor(address _protocolParametersAddress) Auction(_protocolParametersAddress) {}
     mapping(uint256 => AuctionData) public auctions;
     struct AuctionData {
         uint256 id;
@@ -47,7 +47,8 @@ contract LinearReverseDutchAuction is Auction {
         address biddingToken,
         uint256 startingPrice,
         uint256 minPrice,
-        uint256 deadline
+        uint256 deadline,
+        uint256 protocolFee
     );
 
     function createAuction(
@@ -84,14 +85,28 @@ contract LinearReverseDutchAuction is Auction {
             deadline: deadline,
             duration: duration,
             isClaimed: false,
-            protocolFee: ProtocolParameters(protocolParametersAddress).protocolFeeRate()
+            protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, minPrice, deadline);
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            auctionedTokenIdOrAmount,
+            biddingToken,
+            startingPrice,
+            minPrice,
+            deadline,
+            protocolParameters.fee()
+        );
     }
 
     function getCurrentPrice(uint256 auctionId) public view exists(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
-        if(block.timestamp >= auction.deadline) return auction.settlePrice;
+        if (block.timestamp >= auction.deadline) return auction.settlePrice;
         // price(t) = startingPrice - (((startingPrice - minPrice) * (timeElapsed)) / duration)
         return auction.startingPrice - (((auction.startingPrice - auction.minPrice) * (block.timestamp - (auction.deadline - auction.duration))) / auction.duration);
     }
@@ -101,13 +116,13 @@ contract LinearReverseDutchAuction is Auction {
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
-        address feeRecipient = ProtocolParameters(protocolParametersAddress).protocolFeeRecipient();
+        address feeRecipient = protocolParameters.treasury();
         sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendFunds(false, auction.biddingToken,feeRecipient,fees);
+        sendFunds(false, auction.biddingToken, feeRecipient, fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
-    
-    function bid(uint256 auctionId) external exists(auctionId) withinDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+
+    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);
@@ -120,7 +135,7 @@ contract LinearReverseDutchAuction is Auction {
 
     function claim(uint256 auctionId) public exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer,"Invalid call");
+        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, 'Invalid call');
         auction.isClaimed = true;
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);

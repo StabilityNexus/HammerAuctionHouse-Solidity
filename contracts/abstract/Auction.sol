@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import '../ProtocolParameters.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol';
@@ -13,7 +14,8 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  */
 abstract contract Auction is IERC721Receiver {
     uint256 public auctionCounter = 0;
-    address public protocolParametersAddress;
+    ProtocolParameters protocolParameters;
+
     enum AuctionType {
         NFT,
         Token
@@ -38,7 +40,7 @@ abstract contract Auction is IERC721Receiver {
         _;
     }
 
-    modifier withinDeadline(uint256 deadline) {
+    modifier beforeDeadline(uint256 deadline) {
         require(block.timestamp < deadline , "Deadline of auction reached");
         _;
     }
@@ -54,7 +56,7 @@ abstract contract Auction is IERC721Receiver {
     }
 
     constructor(address _protocolParametersAddress) nonZeroAddress(_protocolParametersAddress) {
-        protocolParametersAddress = _protocolParametersAddress;
+        protocolParameters = ProtocolParameters(_protocolParametersAddress);
     }
 
     function receiveFunds(bool isNFT, address token, address from, uint256 tokenIdOrAmount) internal {
