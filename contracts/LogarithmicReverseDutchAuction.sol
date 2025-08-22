@@ -96,22 +96,7 @@ contract LogarithmicReverseDutchAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(
-            auctionCounter++,
-            name,
-            description,
-            imgUrl,
-            msg.sender,
-            auctionType,
-            auctionedToken,
-            auctionedTokenIdOrAmount,
-            biddingToken,
-            startingPrice,
-            minPrice,
-            decayFactor,
-            deadline,
-            protocolParameters.fee()
-        );
+        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, minPrice, decayFactor, deadline, protocolParameters.fee());
     }
 
     function log2Fixed(uint256 x, uint8 fracBits) internal pure returns (uint256) {

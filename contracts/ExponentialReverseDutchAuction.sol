@@ -96,22 +96,7 @@ contract ExponentialReverseDutchAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(
-            auctionCounter++,
-            name,
-            description,
-            imgUrl,
-            msg.sender,
-            auctionType,
-            auctionedToken,
-            auctionedTokenIdOrAmount,
-            biddingToken,
-            startingPrice,
-            minPrice,
-            decayFactor,
-            deadline,
-            protocolParameters.fee()
-        );
+        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, minPrice, decayFactor, deadline, protocolParameters.fee());
     }
 
     function getDecayValue(uint256 x) internal view returns (uint256) {

@@ -88,22 +88,7 @@ contract AllPayAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(
-            auctionCounter++, //increment auctionCounter after creating the auction
-            name,
-            description,
-            imgUrl,
-            msg.sender,
-            auctionType,
-            auctionedToken,
-            auctionedTokenIdOrAmount,
-            biddingToken,
-            startingBid,
-            minBidDelta,
-            deadline,
-            deadlineExtension,
-            protocolParameters.fee()
-        );
+        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
     }
 
     function bid(uint256 auctionId, uint256 bidIncrement) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
