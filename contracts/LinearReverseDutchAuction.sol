@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import './abstract/Auction.sol';
+import './ProtocolParameters.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
@@ -12,6 +13,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * The first bidder to meet the current price wins the auction.
  */
 contract LinearReverseDutchAuction is Auction {
+    constructor(address _protocolParametersAddress) Auction(_protocolParametersAddress) {}
     mapping(uint256 => AuctionData) public auctions;
     struct AuctionData {
         uint256 id;
@@ -25,12 +27,13 @@ contract LinearReverseDutchAuction is Auction {
         address biddingToken;
         uint256 startingPrice;
         uint256 availableFunds;
-        uint256 reservedPrice;
+        uint256 minPrice;
         uint256 settlePrice;
         address winner;
         uint256 deadline;
         uint256 duration;
         bool isClaimed;
+        uint256 protocolFee;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -43,8 +46,9 @@ contract LinearReverseDutchAuction is Auction {
         uint256 auctionedTokenIdOrAmount,
         address biddingToken,
         uint256 startingPrice,
-        uint256 reservedPrice,
-        uint256 deadline
+        uint256 minPrice,
+        uint256 deadline,
+        uint256 protocolFee
     );
 
     function createAuction(
@@ -56,10 +60,10 @@ contract LinearReverseDutchAuction is Auction {
         uint256 auctionedTokenIdOrAmount,
         address biddingToken,
         uint256 startingPrice,
-        uint256 reservedPrice,
+        uint256 minPrice,
         uint256 duration
-    ) external validAuctionParams(name,auctionedToken,biddingToken) {
-        require(startingPrice >= reservedPrice, 'Starting price should be higher than reserved price');
+    ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
+        require(startingPrice >= minPrice, 'Starting price should be higher than minimum price');
         require(duration > 0, 'Duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;
@@ -75,45 +79,51 @@ contract LinearReverseDutchAuction is Auction {
             biddingToken: biddingToken,
             startingPrice: startingPrice,
             availableFunds: 0,
-            reservedPrice: reservedPrice,
-            settlePrice: reservedPrice,
+            minPrice: minPrice,
+            settlePrice: minPrice,
             winner: msg.sender,
             deadline: deadline,
             duration: duration,
-            isClaimed: false
+            isClaimed: false,
+            protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, reservedPrice, deadline);
+        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, minPrice, deadline, protocolParameters.fee());
     }
 
-    function getCurrentPrice(uint256 auctionId) public view validAuctionId(auctionId) returns (uint256) {
+    function getCurrentPrice(uint256 auctionId) public view exists(auctionId) returns (uint256) {
         AuctionData storage auction = auctions[auctionId];
-        if(block.timestamp >= auction.deadline) return auction.settlePrice;
-        require(!auction.isClaimed, 'Auction has ended');
-        // price(t) = startingPrice - (((startingPrice - reservedPrice) * (timeElapsed)) / duration)
-        return auction.startingPrice - (((auction.startingPrice - auction.reservedPrice) * (block.timestamp - (auction.deadline - auction.duration))) / auction.duration);
+        if (block.timestamp >= auction.deadline) return auction.settlePrice;
+        // price(t) = startingPrice - (((startingPrice - minPrice) * (timeElapsed)) / duration)
+        return auction.startingPrice - (((auction.startingPrice - auction.minPrice) * (block.timestamp - (auction.deadline - auction.duration))) / auction.duration);
     }
 
-    function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) validAccess(auctions[auctionId].auctioneer, auctions[auctionId].winner, auctions[auctionId].deadline){
+    function withdraw(uint256 auctionId) internal {
         AuctionData storage auction = auctions[auctionId];
-        require(!auction.isClaimed, 'Auction has been settled');
-        uint256 currentPrice = getCurrentPrice(auctionId);
-        auction.winner = msg.sender;
-        auction.availableFunds = currentPrice;
-        auction.isClaimed = true;
-        auction.settlePrice = currentPrice;
-        if(auction.auctioneer != auction.winner) receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
-        emit itemWithdrawn(auctionId, msg.sender, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
-    }
-
-    function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {
-        AuctionData storage auction = auctions[auctionId];
-        require(msg.sender == auctions[auctionId].auctioneer, 'Not auctioneer!');
         uint256 withdrawAmount = auction.availableFunds;
-        require(withdrawAmount > 0, 'No funds available');
-        require(block.timestamp >= auction.deadline || auction.isClaimed, 'Auction is still ongoing');
         auction.availableFunds = 0;
-        sendFunds(false, auction.biddingToken, msg.sender, withdrawAmount);
-        emit fundsWithdrawn(auctionId, withdrawAmount);
+        uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
+        address feeRecipient = protocolParameters.treasury();
+        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendFunds(false, auction.biddingToken, feeRecipient, fees);
+        emit Withdrawn(auctionId, withdrawAmount);
+    }
+
+    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+        AuctionData storage auction = auctions[auctionId];
+        auction.winner = msg.sender;
+        uint256 currentPrice = getCurrentPrice(auctionId);
+        receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
+        auction.availableFunds = currentPrice;
+        auction.settlePrice = currentPrice;
+        claim(auctionId);
+        withdraw(auctionId);
+    }
+
+    function claim(uint256 auctionId) public exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
+        AuctionData storage auction = auctions[auctionId];
+        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, "Invalid call");
+        auction.isClaimed = true;
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }

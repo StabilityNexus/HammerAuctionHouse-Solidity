@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import './abstract/Auction.sol';
+import './ProtocolParameters.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
@@ -11,11 +12,12 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * @notice Auction contract for NFT and token auctions, where bidders commit to a hidden bid amount and reveal it later.
  * The highest bidder wins the auction and pays the second-highest bid.
  * The rest of the bidders get their bid amount refunded.
- * During the commit phase, bidders can commit to a bid amount using a hash of the bid and a salt,along with a fees of 0.001eth.
+ * During the commit phase, bidders can commit to a bid amount using a hash of the bid and a salt,along with a commit fee.
  * During the reveal phase, bidders reveal their bid amount and salt,and makes the bid transfer.On correct reveal,the fees is refunded.
  */
 
 contract VickreyAuction is Auction {
+    constructor(address _protocolParametersAddress) Auction(_protocolParametersAddress) {}
     mapping(uint256 => AuctionData) public auctions;
     mapping(uint256 => mapping(address => bytes32)) public commitments;
     mapping(uint256 => mapping(address => uint256)) public bids;
@@ -36,6 +38,9 @@ contract VickreyAuction is Auction {
         uint256 bidCommitEnd;
         uint256 bidRevealEnd;
         bool isClaimed;
+        uint256 commitFee;
+        uint256 protocolFee;
+        uint256 accumulatedCommitFee;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -48,14 +53,10 @@ contract VickreyAuction is Auction {
         uint256 auctionedTokenIdOrAmount,
         address biddingToken,
         uint256 bidCommitEnd,
-        uint256 bidRevealEnd
+        uint256 bidRevealEnd,
+        uint256 protocolFee
     );
-
-    event BidRevealed(
-        uint256 indexed auctionId,
-        address indexed bidder,
-        uint256 bidAmount
-    );
+    event BidRevealed(uint256 indexed auctionId, address indexed bidder, uint256 bidAmount);
 
     function createAuction(
         string memory name,
@@ -67,14 +68,15 @@ contract VickreyAuction is Auction {
         address biddingToken,
         uint256 minBid,
         uint256 bidCommitDuration,
-        uint256 bidRevealDuration
-    ) external validAuctionParams(name,auctionedToken,biddingToken) {
+        uint256 bidRevealDuration,
+        uint256 commitFee
+    ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
         require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day');
         require(bidCommitDuration > 0, 'Bid commit duration must be greater than zero seconds');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 bidCommitEnd = bidCommitDuration + block.timestamp;
         uint256 bidRevealEnd = bidRevealDuration + bidCommitEnd;
-        bids[auctionCounter][msg.sender]=minBid;
+        bids[auctionCounter][msg.sender] = minBid;
         auctions[auctionCounter] = AuctionData({
             id: auctionCounter,
             name: name,
@@ -91,24 +93,29 @@ contract VickreyAuction is Auction {
             startTime: block.timestamp,
             bidCommitEnd: bidCommitEnd,
             bidRevealEnd: bidRevealEnd,
-            isClaimed: false
+            isClaimed: false,
+            commitFee: commitFee,
+            protocolFee: protocolParameters.fee(),
+            accumulatedCommitFee: 0
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd);
+        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd, protocolParameters.fee());
     }
 
-    function commitBid(uint256 auctionId, bytes32 commitment) external payable validAuctionId(auctionId) {
+    function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) beforeDeadline(auctions[auctionId].bidCommitEnd) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.bidCommitEnd, 'The commiting phase has ended!');
         require(commitments[auctionId][msg.sender] == bytes32(0), 'The sender has already commited');
-        require(msg.value == 1000000000000000, 'Commit fee must be exactly 0.001 ETH'); // require exact fee
+        require(msg.value == auction.commitFee, 'Insufficient commit fee'); // require exact fee
         require(auction.auctioneer != msg.sender, 'Auctioneer cannot commit to bid');
         commitments[auctionId][msg.sender] = commitment;
+        auction.accumulatedCommitFee += msg.value;
     }
 
-    function revealBid(uint256 auctionId, uint256 bidAmount, bytes32 salt) external validAuctionId(auctionId) {
+    function revealBid(
+        uint256 auctionId,
+        uint256 bidAmount,
+        bytes32 salt
+    ) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidCommitEnd) beforeDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp < auction.bidRevealEnd, 'The revealing phase has ended!');
-        require(block.timestamp > auction.bidCommitEnd, 'The commiting phase has not ended yet!');
         require(commitments[auctionId][msg.sender] != bytes32(0), "The sender hadn't commited during commiting phase");
         bytes32 check = keccak256(abi.encodePacked(bidAmount, salt));
         require(check == commitments[auctionId][msg.sender], 'Invalid reveal');
@@ -116,8 +123,8 @@ contract VickreyAuction is Auction {
         uint256 highestBid = bids[auctionId][auction.winner];
         receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
         if (highestBid < bidAmount) {
-            if (highestBid > 0 && auction.winner!=msg.sender) {
-                sendFunds(false,auction.biddingToken, auction.winner,highestBid); //Refund the previous highest bidder(not the auctioneer initially)
+            if (highestBid > 0 && auction.winner != msg.sender) {
+                sendFunds(false, auction.biddingToken, auction.winner, highestBid); //Refund the previous highest bidder(not the auctioneer initially)
             }
             auction.availableFunds = highestBid;
             auction.winningBid = highestBid; //Previous highest bid is now the winning bid which will be paid by the winner
@@ -130,30 +137,34 @@ contract VickreyAuction is Auction {
         } else {
             sendFunds(false, auction.biddingToken, msg.sender, bidAmount); //Not the highest bidder, refund the bid amount
         }
-        (bool success, ) = msg.sender.call{value: 1000000000000000}(''); //Refund exactly 0.001 ETH
-        require(success, 'Transfer failed');
+        (bool success, ) = msg.sender.call{value: auction.commitFee}(''); //Refund commit fee
+        require(success, 'Refund failed');
+        auction.accumulatedCommitFee -= auction.commitFee;
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
-    function withdrawFunds(uint256 auctionId) external validAuctionId(auctionId) {
+    function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
-        require(msg.sender == auctions[auctionId].auctioneer, 'Not auctioneer!');
-        require(block.timestamp > auction.bidRevealEnd, "Reveal period hasn't ended yet");
         uint256 withdrawAmount = auction.availableFunds;
-        require(withdrawAmount > 0, 'No funds available');
         auction.availableFunds = 0;
-        sendFunds(false, auction.biddingToken, msg.sender, withdrawAmount);
-        emit fundsWithdrawn(auctionId, withdrawAmount);
+        uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
+        address feeRecipient = protocolParameters.treasury();
+        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendFunds(false, auction.biddingToken, feeRecipient, fees);
+        if (auction.accumulatedCommitFee != 0) {
+            (bool success, ) = auction.auctioneer.call{value: auction.accumulatedCommitFee}('');
+            require(success, 'Commit fee withdrawal failed');
+            auction.accumulatedCommitFee = 0;
+        }
+        emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function withdrawItem(uint256 auctionId) external validAuctionId(auctionId) {
+    function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
-        require(msg.sender == auction.winner, 'Not auction winner');
-        require(block.timestamp > auction.bidRevealEnd, 'Reveal period has not ended yet');
-        require(!auction.isClaimed, 'Auction had been settled');
         auction.isClaimed = true;
-        if(msg.sender!=auction.auctioneer) sendFunds(false, auction.biddingToken, msg.sender, bids[auctionId][msg.sender] - auction.winningBid);
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, msg.sender, auction.auctionedTokenIdOrAmount);
-        emit itemWithdrawn(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
+        uint256 refund = bids[auctionId][auction.winner] - auction.winningBid;
+        if (refund != 0) sendFunds(false, auction.biddingToken, auction.winner, refund);
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }

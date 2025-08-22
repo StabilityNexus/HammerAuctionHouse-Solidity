@@ -25,6 +25,10 @@ const config: HardhatUserConfig = {
         mordor: {
             url: 'https://rpc.mordor.etccooperative.org',
             accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+        },
+        citrea: {
+            url: 'https://rpc.testnet.citrea.xyz',
+            accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
         }
     },
 };
