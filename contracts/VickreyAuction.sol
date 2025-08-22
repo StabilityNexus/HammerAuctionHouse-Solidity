@@ -162,7 +162,8 @@ contract VickreyAuction is Auction {
     function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.isClaimed = true;
-        if (bids[auctionId][auction.winner] != auction.winningBid) sendFunds(false, auction.biddingToken, auction.winner, bids[auctionId][auction.winner] - auction.winningBid); // The conditional prevents sending a refund of 0.
+        uint256 refund = bids[auctionId][auction.winner] - auction.winningBid;
+        if (refund != 0) sendFunds(false, auction.biddingToken, auction.winner, refund);
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
