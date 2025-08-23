@@ -73,7 +73,11 @@ contract VickreyAuction is Auction {
     ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
         require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day');
         require(bidCommitDuration > 0, 'Bid commit duration must be greater than zero seconds');
-        receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        if(auctionType == AuctionType.Token){
+            receiveERC20(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        }else{
+            receiveNFT(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        }
         uint256 bidCommitEnd = bidCommitDuration + block.timestamp;
         uint256 bidRevealEnd = bidRevealDuration + bidCommitEnd;
         bids[auctionCounter][msg.sender] = minBid;
@@ -121,10 +125,10 @@ contract VickreyAuction is Auction {
         require(check == commitments[auctionId][msg.sender], 'Invalid reveal');
         bids[auctionId][msg.sender] = bidAmount;
         uint256 highestBid = bids[auctionId][auction.winner];
-        receiveFunds(false, auction.biddingToken, msg.sender, bidAmount);
+        receiveERC20(auction.biddingToken, msg.sender, bidAmount);
         if (highestBid < bidAmount) {
             if (highestBid > 0 && auction.winner != msg.sender) {
-                sendFunds(false, auction.biddingToken, auction.winner, highestBid); //Refund the previous highest bidder(not the auctioneer initially)
+                sendERC20(auction.biddingToken, auction.winner, highestBid); //Refund the previous highest bidder(not the auctioneer initially)
             }
             auction.availableFunds = highestBid;
             auction.winningBid = highestBid; //Previous highest bid is now the winning bid which will be paid by the winner
@@ -133,9 +137,9 @@ contract VickreyAuction is Auction {
             //Tracking the second highest bid,if someone bids more than the current winning bid but not the highest bid
             auction.availableFunds = bidAmount;
             auction.winningBid = bidAmount;
-            sendFunds(false, auction.biddingToken, msg.sender, bidAmount); //Refund the current winning bid to the new bidder
+            sendERC20(auction.biddingToken, msg.sender, bidAmount); //Refund the current winning bid to the new bidder
         } else {
-            sendFunds(false, auction.biddingToken, msg.sender, bidAmount); //Not the highest bidder, refund the bid amount
+            sendERC20(auction.biddingToken, msg.sender, bidAmount); //Not the highest bidder, refund the bid amount
         }
         (bool success, ) = msg.sender.call{value: auction.commitFee}(''); //Refund commit fee
         require(success, 'Refund failed');
@@ -149,8 +153,8 @@ contract VickreyAuction is Auction {
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
-        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendFunds(false, auction.biddingToken, feeRecipient, fees);
+        sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendERC20(auction.biddingToken, feeRecipient, fees);
         if (auction.accumulatedCommitFee != 0) {
             (bool success, ) = auction.auctioneer.call{value: auction.accumulatedCommitFee}('');
             require(success, 'Commit fee withdrawal failed');
@@ -163,8 +167,12 @@ contract VickreyAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         auction.isClaimed = true;
         uint256 refund = bids[auctionId][auction.winner] - auction.winningBid;
-        if (refund != 0) sendFunds(false, auction.biddingToken, auction.winner, refund);
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        if (refund != 0) sendERC20(auction.biddingToken, auction.winner, refund);
+        if(auction.auctionType == AuctionType.NFT) {
+            sendNFT(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        } else {
+            sendERC20(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        }
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }
