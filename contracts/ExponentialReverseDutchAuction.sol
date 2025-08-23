@@ -72,7 +72,11 @@ contract ExponentialReverseDutchAuction is Auction {
         require(startingPrice >= minPrice, 'Starting price should be higher than minimum price');
         require(duration > 0, 'Duration must be greater than zero seconds');
         //decay Factor is scaled with 10^5 to ensure precision upto three decimal points
-        receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount); 
+        if(auctionType == AuctionType.Token){
+            receiveERC20(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        }else{
+            receiveNFT(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        }
         uint256 deadline = block.timestamp + duration;
         auctions[auctionCounter] = AuctionData({
             id: auctionCounter,
@@ -126,8 +130,8 @@ contract ExponentialReverseDutchAuction is Auction {
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
-        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendFunds(false, auction.biddingToken,feeRecipient,fees);
+        sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendERC20(auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
     
@@ -135,7 +139,7 @@ contract ExponentialReverseDutchAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);
-        receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
+        receiveERC20(auction.biddingToken, msg.sender, currentPrice);
         auction.availableFunds = currentPrice;
         auction.settlePrice = currentPrice;
         claim(auctionId);
@@ -146,7 +150,11 @@ contract ExponentialReverseDutchAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer,"Invalid call");
         auction.isClaimed = true;
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        if(auction.auctionType == AuctionType.NFT){
+            sendNFT(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        }else{
+            sendERC20(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        }
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 

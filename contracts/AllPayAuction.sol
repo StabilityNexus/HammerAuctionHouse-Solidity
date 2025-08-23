@@ -25,7 +25,7 @@ contract AllPayAuction is Auction {
         address auctionedToken;
         uint256 auctionedTokenIdOrAmount;
         address biddingToken;
-        uint256 startingBid;
+        uint256 minimumBid;
         uint256 availableFunds;
         uint256 minBidDelta;
         uint256 highestBid;
@@ -45,7 +45,7 @@ contract AllPayAuction is Auction {
         address auctionedToken,
         uint256 auctionedTokenIdOrAmount,
         address biddingToken,
-        uint256 startingBid,
+        uint256 minimumBid,
         uint256 minBidDelta,
         uint256 deadline,
         uint256 deadlineExtension,
@@ -60,13 +60,17 @@ contract AllPayAuction is Auction {
         address auctionedToken,
         uint256 auctionedTokenIdOrAmount,
         address biddingToken,
-        uint256 startingBid,
+        uint256 minimumBid,
         uint256 minBidDelta,
         uint256 duration,
         uint256 deadlineExtension
     ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
         require(duration > 0, 'Duration should be greater than 0');
-        receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        if(auctionType == AuctionType.Token){
+            receiveERC20(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        }else{
+            receiveNFT(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        }
         uint256 deadline = block.timestamp + duration;
         auctions[auctionCounter] = AuctionData({
             id: auctionCounter,
@@ -78,7 +82,7 @@ contract AllPayAuction is Auction {
             auctionedToken: auctionedToken,
             auctionedTokenIdOrAmount: auctionedTokenIdOrAmount,
             biddingToken: biddingToken,
-            startingBid: startingBid,
+            minimumBid: minimumBid,
             availableFunds: 0,
             minBidDelta: minBidDelta,
             highestBid: 0,
@@ -88,19 +92,19 @@ contract AllPayAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
+        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
     }
 
     function bid(uint256 auctionId, uint256 bidIncrement) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
-        require(auction.highestBid != 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.startingBid, 'First bid should be greater than starting bid');
+        require(auction.highestBid != 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.minimumBid, 'First bid should be greater than starting bid');
         require(auction.highestBid == 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
         bids[auctionId][msg.sender] += bidIncrement;
         auction.highestBid = bids[auctionId][msg.sender];
         auction.winner = msg.sender;
         auction.availableFunds += bidIncrement;
         auction.deadline += auction.deadlineExtension;
-        receiveFunds(false, auction.biddingToken, msg.sender, bidIncrement);
+        receiveERC20(auction.biddingToken, msg.sender, bidIncrement);
         emit bidPlaced(auctionId, msg.sender, bids[auctionId][msg.sender]);
     }
 
@@ -110,15 +114,21 @@ contract AllPayAuction is Auction {
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
-        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendFunds(false, auction.biddingToken,feeRecipient,fees);
+        sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendERC20(auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
     function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.isClaimed = true;
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        if(auction.auctionType == AuctionType.NFT) {
+            sendNFT(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        } else {
+            sendERC20(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+        }
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }
+
+// TODO
