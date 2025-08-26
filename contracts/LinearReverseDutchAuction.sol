@@ -65,11 +65,7 @@ contract LinearReverseDutchAuction is Auction {
     ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
         require(startingPrice >= minPrice, 'Starting price should be higher than minimum price');
         require(duration > 0, 'Duration must be greater than zero seconds');
-        if(auctionType == AuctionType.Token){
-            receiveERC20(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
-        }else{
-            receiveNFT(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
-        }
+        receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;
         auctions[auctionCounter] = AuctionData({
             id: auctionCounter,
@@ -127,11 +123,7 @@ contract LinearReverseDutchAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, "Invalid call");
         auction.isClaimed = true;
-        if(auction.auctionType == AuctionType.NFT) {
-            sendNFT(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
-        } else {
-            sendERC20(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
-        }
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }

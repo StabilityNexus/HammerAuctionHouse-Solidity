@@ -73,11 +73,7 @@ contract VickreyAuction is Auction {
     ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
         require(bidRevealDuration > 86400, 'Bid reveal duration must be greater than one day');
         require(bidCommitDuration > 0, 'Bid commit duration must be greater than zero seconds');
-        if(auctionType == AuctionType.Token){
-            receiveERC20(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
-        }else{
-            receiveNFT(auctionedToken, msg.sender, auctionedTokenIdOrAmount);
-        }
+        receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 bidCommitEnd = bidCommitDuration + block.timestamp;
         uint256 bidRevealEnd = bidRevealDuration + bidCommitEnd;
         bids[auctionCounter][msg.sender] = minBid;
@@ -168,11 +164,7 @@ contract VickreyAuction is Auction {
         auction.isClaimed = true;
         uint256 refund = bids[auctionId][auction.winner] - auction.winningBid;
         if (refund != 0) sendERC20(auction.biddingToken, auction.winner, refund);
-        if(auction.auctionType == AuctionType.NFT) {
-            sendNFT(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
-        } else {
-            sendERC20(auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
-        }
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }

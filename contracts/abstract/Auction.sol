@@ -59,6 +59,22 @@ abstract contract Auction is IERC721Receiver {
         protocolParameters = ProtocolParameters(_protocolParametersAddress);
     }
 
+    function sendFunds(bool isNFT, address token, address to, uint256 tokenIdOrAmount) internal {
+        if (isNFT) {
+            sendNFT(token, to, tokenIdOrAmount);
+        } else {
+            sendERC20(token, to, tokenIdOrAmount);
+        }
+    }
+
+    function receiveFunds(bool isNFT, address token, address from, uint256 tokenIdOrAmount) internal {
+        if (isNFT) {
+            receiveNFT(token, from, tokenIdOrAmount);
+        } else {
+            receiveERC20(token, from, tokenIdOrAmount);
+        }
+    }
+
     function sendNFT(address token, address to, uint256 tokenId) internal {
         IERC721(token).safeTransferFrom(address(this), to, tokenId);
     }
