@@ -103,8 +103,8 @@ contract LinearReverseDutchAuction is Auction {
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
-        sendFunds(false, auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendFunds(false, auction.biddingToken, feeRecipient, fees);
+        sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+        sendERC20(auction.biddingToken, feeRecipient, fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
@@ -112,7 +112,7 @@ contract LinearReverseDutchAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);
-        receiveFunds(false, auction.biddingToken, msg.sender, currentPrice);
+        receiveERC20(auction.biddingToken, msg.sender, currentPrice);
         auction.availableFunds = currentPrice;
         auction.settlePrice = currentPrice;
         claim(auctionId);

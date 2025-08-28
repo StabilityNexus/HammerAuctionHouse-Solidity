@@ -59,22 +59,36 @@ abstract contract Auction is IERC721Receiver {
         protocolParameters = ProtocolParameters(_protocolParametersAddress);
     }
 
-    function receiveFunds(bool isNFT, address token, address from, uint256 tokenIdOrAmount) internal {
+    function sendFunds(bool isNFT, address token, address to, uint256 tokenIdOrAmount) internal {
         if (isNFT) {
-            IERC721(token).safeTransferFrom(from, address(this), tokenIdOrAmount);
+            sendNFT(token, to, tokenIdOrAmount);
         } else {
-            require(tokenIdOrAmount > 0, 'Amount must be greater than zero');
-            SafeERC20.safeTransferFrom(IERC20(token), from, address(this), tokenIdOrAmount);
+            sendERC20(token, to, tokenIdOrAmount);
         }
     }
 
-    function sendFunds(bool isNFT, address token, address to, uint256 tokenIdOrAmount) internal {
+    function receiveFunds(bool isNFT, address token, address from, uint256 tokenIdOrAmount) internal {
         if (isNFT) {
-            IERC721(token).safeTransferFrom(address(this), to, tokenIdOrAmount);
+            receiveNFT(token, from, tokenIdOrAmount);
         } else {
-            require(tokenIdOrAmount > 0, 'Amount must be greater than zero');
-            SafeERC20.safeTransfer(IERC20(token), to, tokenIdOrAmount);
+            receiveERC20(token, from, tokenIdOrAmount);
         }
+    }
+
+    function sendNFT(address token, address to, uint256 tokenId) internal {
+        IERC721(token).safeTransferFrom(address(this), to, tokenId);
+    }
+
+    function sendERC20(address token, address to, uint256 tokenAmount) internal {
+        SafeERC20.safeTransfer(IERC20(token), to, tokenAmount);
+    }
+
+    function receiveNFT(address token, address from, uint256 tokenId) internal {
+        IERC721(token).safeTransferFrom(from, address(this), tokenId);
+    }
+
+    function receiveERC20(address token, address from, uint256 tokenAmount) internal {
+        SafeERC20.safeTransferFrom(IERC20(token), from, address(this), tokenAmount);
     }
 
     // Used in allowing the contract to receive ERC721 tokens through SafeTransfer.
