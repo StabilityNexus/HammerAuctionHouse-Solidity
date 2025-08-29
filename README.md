@@ -3,9 +3,9 @@
 
 <!-- Organization Logo -->
 <div align="center" style="display: flex; align-items: center; justify-content: center; gap: 16px;">
-  <img alt="Stability Nexus" src="public/stability.svg" width="175">
+  <img alt="Stability Nexus" src="public/stable.svg" width="175">
   <!-- <img src="public/cross.svg" width="30" style="margin: 0;" /> -->
-  <img src="public/logo-white.svg" width="175" />
+  <img src="public/logo.svg" width="175" />
 </div>
 
 &nbsp;
