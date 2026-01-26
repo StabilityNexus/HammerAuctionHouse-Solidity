@@ -1,13 +1,14 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer, ZeroAddress } from 'ethers';
-import { LinearReverseDutchAuction, MockNFT, MockToken } from '../typechain-types';
+import { LinearReverseDutchAuction, MockNFT, MockToken, ProtocolParameters } from '../typechain-types';
 
 describe('LinearReverseDutchAuction', function () {
     let linearReverseDutchAuction: LinearReverseDutchAuction;
     let mockNFT: MockNFT;
     let mockToken: MockToken;
     let biddingToken: MockToken;
+    let protocolParameters: ProtocolParameters;
     let owner: Signer;
     let auctioneer: Signer;
     let bidder1: Signer;
@@ -27,12 +28,16 @@ describe('LinearReverseDutchAuction', function () {
         // Deploy mock ERC20 for bidding
         biddingToken = await MockToken.deploy('BiddingToken', 'BTK');
 
+        // Deploy ProtocolParameters
+        const ProtocolParameters = await ethers.getContractFactory('ProtocolParameters');
+        protocolParameters = await ProtocolParameters.deploy(await owner.getAddress(), await owner.getAddress(), 100);
+
         // Deploy Linear Reverse Dutch Auction contract
         const LinearReverseDutchAuction = await ethers.getContractFactory('LinearReverseDutchAuction');
-        linearReverseDutchAuction = await LinearReverseDutchAuction.deploy();
+        linearReverseDutchAuction = await LinearReverseDutchAuction.deploy(await protocolParameters.getAddress());
 
-        // Mint NFT to auctioneer
-        await mockNFT.mint(auctioneer.getAddress(), 1);
+        // Transfer pre-minted NFT from owner to auctioneer
+        await mockNFT.connect(owner).transferFrom(await owner.getAddress(), await auctioneer.getAddress(), 1);
         // Mint tokens to auctioneer
         await mockToken.mint(auctioneer.getAddress(), ethers.parseEther('100'));
 
@@ -171,7 +176,7 @@ describe('LinearReverseDutchAuction', function () {
 
             //bid amount should be 10-(10-1)*(5/10)= 5.5
             await biddingToken.connect(bidder1).approve(linearReverseDutchAuction.getAddress(), bidAmount);
-            await linearReverseDutchAuction.connect(bidder1).withdrawItem(0);
+            await linearReverseDutchAuction.connect(bidder1).bid(0);
             const auction = await linearReverseDutchAuction.auctions(0);
             expect(auction.winner).to.equal(await bidder1.getAddress());
 
@@ -183,10 +188,9 @@ describe('LinearReverseDutchAuction', function () {
         it('allows successful withdraw of accumulated funds', async function () {
             const initialBid = ethers.parseEther('10');
             await biddingToken.connect(bidder1).approve(linearReverseDutchAuction.getAddress(), initialBid);
-            await linearReverseDutchAuction.connect(bidder1).withdrawItem(0);
+            await linearReverseDutchAuction.connect(bidder1).bid(0);
 
-            // Auctioneer withdraws accumulated funds
-            await linearReverseDutchAuction.connect(auctioneer).withdrawFunds(0);
+            // bid() automatically calls withdraw() internally and transfers funds to auctioneer
             const newBalance = await biddingToken.balanceOf(await auctioneer.getAddress());
 
             expect(newBalance).is.lessThan(ethers.parseEther('110')); // Include accumulated funds

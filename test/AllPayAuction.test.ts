@@ -1,13 +1,14 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer, ZeroAddress } from 'ethers';
-import { AllPayAuction, MockNFT, MockToken } from '../typechain-types';
+import { AllPayAuction, MockNFT, MockToken, ProtocolParameters } from '../typechain-types';
 
 describe('AllPayAuction', function () {
     let allPayAuction: AllPayAuction;
     let mockNFT: MockNFT;
     let mockToken: MockToken;
     let biddingToken: MockToken;
+    let protocolParameters: ProtocolParameters;
     let owner: Signer;
     let auctioneer: Signer;
     let bidder1: Signer;
@@ -24,10 +25,14 @@ describe('AllPayAuction', function () {
 
         biddingToken = await MockToken.deploy('BiddingToken', 'BTK');
 
-        const AllPayAuction = await ethers.getContractFactory('AllPayAuction');
-        allPayAuction = await AllPayAuction.deploy();
+        const ProtocolParameters = await ethers.getContractFactory('ProtocolParameters');
+        protocolParameters = await ProtocolParameters.deploy(await owner.getAddress(), await owner.getAddress(), 100);
 
-        await mockNFT.mint(await auctioneer.getAddress(), 1);
+        const AllPayAuction = await ethers.getContractFactory('AllPayAuction');
+        allPayAuction = await AllPayAuction.deploy(await protocolParameters.getAddress());
+
+        // Transfer pre-minted NFT from owner to auctioneer
+        await mockNFT.connect(owner).transferFrom(await owner.getAddress(), await auctioneer.getAddress(), 1);
         await mockToken.mint(await auctioneer.getAddress(), ethers.parseEther('100'));
 
         await biddingToken.mint(await bidder1.getAddress(), ethers.parseEther('100'));
@@ -164,7 +169,7 @@ describe('AllPayAuction', function () {
         it('should allow valid bids', async function () {
             const bidAmount = ethers.parseEther('1.0');
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), bidAmount);
-            await allPayAuction.connect(bidder1).placeBid(0, bidAmount);
+            await allPayAuction.connect(bidder1).bid(0, bidAmount);
 
             const auction = await allPayAuction.auctions(0);
             expect(auction.winner).to.equal(await bidder1.getAddress());
@@ -176,7 +181,7 @@ describe('AllPayAuction', function () {
 
             const bidAmount = ethers.parseEther('1.1');
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), bidAmount);
-            await allPayAuction.connect(bidder1).placeBid(0, bidAmount);
+            await allPayAuction.connect(bidder1).bid(0, bidAmount);
 
             const afterBid = (await allPayAuction.auctions(0)).deadline;
             expect(afterBid).to.be.gt(beforeBid);
@@ -187,19 +192,19 @@ describe('AllPayAuction', function () {
             //First bid
             const firstBid = ethers.parseEther('1.0');
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), firstBid);
-            await allPayAuction.connect(bidder1).placeBid(0, firstBid);
+            await allPayAuction.connect(bidder1).bid(0, firstBid);
             expect((await allPayAuction.auctions(0)).winner).to.equal(await bidder1.getAddress());
 
             //Second Bid by another bidder
             const secondBid = ethers.parseEther('1.2');
             await biddingToken.connect(bidder2).approve(allPayAuction.getAddress(), secondBid);
-            await allPayAuction.connect(bidder2).placeBid(0, secondBid);
+            await allPayAuction.connect(bidder2).bid(0, secondBid);
             expect((await allPayAuction.auctions(0)).winner).to.equal(await bidder2.getAddress()); //Second bidder should be winner now
 
             //Third Bid by first bidder overpassing the second bidder by 0.3(1.2)
             const thirdBid = ethers.parseEther('0.5');
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), thirdBid);
-            await allPayAuction.connect(bidder1).placeBid(0, thirdBid);
+            await allPayAuction.connect(bidder1).bid(0, thirdBid);
             expect((await allPayAuction.auctions(0)).winner).to.equal(await bidder1.getAddress()); //First bidder should be winner now
         });
     });
@@ -226,7 +231,7 @@ describe('AllPayAuction', function () {
         it('should transfer NFT to winner and funds to auctioneer', async function () {
             const bidAmount = ethers.parseEther('1.1');
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), bidAmount);
-            await allPayAuction.connect(bidder1).placeBid(0, bidAmount);
+            await allPayAuction.connect(bidder1).bid(0, bidAmount);
 
             // Fast forward time by 20 seconds (5+10+5 buffer)
             await ethers.provider.send('evm_increaseTime', [20]);
@@ -234,11 +239,11 @@ describe('AllPayAuction', function () {
 
             const auctioneerBalanceBefore = await biddingToken.balanceOf(await auctioneer.getAddress());
 
-            // Winner withdraws auctioned item
-            await allPayAuction.connect(bidder1).withdrawItem(0);
+            // Winner claims auctioned item
+            await allPayAuction.connect(bidder1).claim(0);
 
             // Auctioneer withdraws funds
-            await allPayAuction.connect(auctioneer).withdrawFunds(0);
+            await allPayAuction.connect(auctioneer).withdraw(0);
 
             const nftOwner = await mockNFT.ownerOf(1);
             expect(nftOwner).to.equal(await bidder1.getAddress());
@@ -250,16 +255,16 @@ describe('AllPayAuction', function () {
         it('should not allow multiple withdrawals by winner', async function () {
             const bidAmount = ethers.parseEther('1.1');
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), bidAmount);
-            await allPayAuction.connect(bidder1).placeBid(0, bidAmount);
+            await allPayAuction.connect(bidder1).bid(0, bidAmount);
 
             await ethers.provider.send('evm_increaseTime', [20]);
             await ethers.provider.send('evm_mine', []);
 
-            // Winner withdraws auctioned item
-            await allPayAuction.connect(bidder1).withdrawItem(0);
+            // Winner claims auctioned item
+            await allPayAuction.connect(bidder1).claim(0);
 
-            // Attempt to withdraw again
-            await expect(allPayAuction.connect(bidder1).withdrawItem(0)).to.be.revertedWith('Auction had been settled');
+            // Attempt to claim again
+            await expect(allPayAuction.connect(bidder1).claim(0)).to.be.revertedWith('Auction had been settled');
         });
     });
 
@@ -284,10 +289,10 @@ describe('AllPayAuction', function () {
 
             const bidAmount = ethers.parseEther('1.5');
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), bidAmount);
-            await allPayAuction.connect(bidder1).placeBid(0, bidAmount);
+            await allPayAuction.connect(bidder1).bid(0, bidAmount);
 
             const balanceBefore = await biddingToken.balanceOf(await auctioneer.getAddress());
-            await allPayAuction.connect(auctioneer).withdrawFunds(0);
+            await allPayAuction.connect(auctioneer).withdraw(0);
             const balanceAfter = await biddingToken.balanceOf(await auctioneer.getAddress());
 
             expect(balanceAfter).to.be.gt(balanceBefore);

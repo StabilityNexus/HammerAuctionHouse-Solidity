@@ -1,13 +1,14 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer } from 'ethers';
-import { VickreyAuction, MockNFT, MockToken } from '../typechain-types';
+import { VickreyAuction, MockNFT, MockToken, ProtocolParameters } from '../typechain-types';
 
 describe('VickreyAuction', function () {
     let vickreyAuction: VickreyAuction;
     let mockNFT: MockNFT;
     let mockToken: MockToken;
     let biddingToken: MockToken;
+    let protocolParameters: ProtocolParameters;
     let owner: Signer;
     let auctioneer: Signer;
     let bidder1: Signer;
@@ -24,14 +25,18 @@ describe('VickreyAuction', function () {
         mockToken = await MockToken.deploy('MockToken', 'MTK');
         biddingToken = await MockToken.deploy('BiddingToken', 'BTK');
 
-        const VickreyAuction = await ethers.getContractFactory('VickreyAuction');
-        vickreyAuction = await VickreyAuction.deploy();
+        const ProtocolParameters = await ethers.getContractFactory('ProtocolParameters');
+        protocolParameters = await ProtocolParameters.deploy(await owner.getAddress(), await owner.getAddress(), 100);
 
-        await mockNFT.mint(auctioneer.getAddress(), 1);
+        const VickreyAuction = await ethers.getContractFactory('VickreyAuction');
+        vickreyAuction = await VickreyAuction.deploy(await protocolParameters.getAddress());
+
+        // Transfer pre-minted NFT from owner to auctioneer
+        await mockNFT.connect(owner).transferFrom(await owner.getAddress(), await auctioneer.getAddress(), 1);
         await mockToken.mint(auctioneer.getAddress(), ethers.parseEther('100'));
-        await biddingToken.mint(bidder1.getAddress(), ethers.parseEther('100'));
-        await biddingToken.mint(bidder2.getAddress(), ethers.parseEther('100'));
-        await biddingToken.mint(bidder3.getAddress(), ethers.parseEther('100'));
+        await biddingToken.mint(bidder1.getAddress(), ethers.parseEther('200'));
+        await biddingToken.mint(bidder2.getAddress(), ethers.parseEther('200'));
+        await biddingToken.mint(bidder3.getAddress(), ethers.parseEther('200'));
     });
 
     describe('NFT Vickrey Auction', function () {
@@ -51,8 +56,10 @@ describe('VickreyAuction', function () {
                 await mockNFT.getAddress(),
                 1,
                 await biddingToken.getAddress(),
+                ethers.parseEther('1'), // minBid
                 bidCommitDuration,
                 bidRevealDuration,
+                fees, // commitFee
             );
             auctionId = 0;
         });
@@ -118,13 +125,13 @@ describe('VickreyAuction', function () {
 
             // Winner withdraws NFT and gets refund of difference
             const winnerBalanceBefore = await biddingToken.balanceOf(await bidder2.getAddress());
-            await vickreyAuction.connect(bidder2).withdrawItem(auctionId);
+            await vickreyAuction.connect(bidder2).claim(auctionId);
             const winnerBalanceAfter = await biddingToken.balanceOf(await bidder2.getAddress());
             expect(winnerBalanceAfter - winnerBalanceBefore).to.equal(bid2 - bid3);
 
             // Auctioneer withdraws funds (should be 15 BTK)
             const auctioneerBalanceBefore = await biddingToken.balanceOf(await auctioneer.getAddress());
-            await vickreyAuction.connect(auctioneer).withdrawFunds(auctionId);
+            await vickreyAuction.connect(auctioneer).withdraw(auctionId);
             const auctioneerBalanceAfter = await biddingToken.balanceOf(await auctioneer.getAddress());
             expect(auctioneerBalanceAfter - auctioneerBalanceBefore).to.equal(bid3);
 
@@ -158,14 +165,11 @@ describe('VickreyAuction', function () {
             await ethers.provider.send('evm_increaseTime', [bidRevealDuration + 1]);
             await ethers.provider.send('evm_mine', []);
 
-            // Loser (bidder1) should not be able to withdraw item
-            await expect(vickreyAuction.connect(bidder1).withdrawItem(auctionId)).to.be.revertedWith('Not auction winner');
-
             // Winner can withdraw item
-            await vickreyAuction.connect(bidder2).withdrawItem(auctionId);
+            await vickreyAuction.connect(bidder2).claim(auctionId);
 
             // Auctioneer can withdraw funds
-            await vickreyAuction.connect(auctioneer).withdrawFunds(auctionId);
+            await vickreyAuction.connect(auctioneer).withdraw(auctionId);
         });
 
         it('does not allow commit after commit phase', async function () {
@@ -210,7 +214,7 @@ describe('VickreyAuction', function () {
             await vickreyAuction.connect(bidder1).revealBid(auctionId, bid, salt);
 
             // Try to withdraw before reveal phase ends
-            await expect(vickreyAuction.connect(bidder1).withdrawItem(auctionId)).to.be.revertedWith('Reveal period has not ended yet');
+            await expect(vickreyAuction.connect(bidder1).claim(auctionId)).to.be.revertedWith('Reveal period has not ended yet');
         });
     });
 });

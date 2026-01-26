@@ -1,13 +1,14 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer, ZeroAddress } from 'ethers';
-import { EnglishAuction, MockNFT, MockToken } from '../typechain-types';
+import { EnglishAuction, MockNFT, MockToken, ProtocolParameters } from '../typechain-types';
 
 describe('EnglishAuction', function () {
     let englishAuction: EnglishAuction;
     let mockNFT: MockNFT;
     let mockToken: MockToken;
     let biddingToken: MockToken;
+    let protocolParameters: ProtocolParameters;
     let owner: Signer;
     let auctioneer: Signer;
     let bidder1: Signer;
@@ -26,12 +27,16 @@ describe('EnglishAuction', function () {
         // Deploy mock ERC20 for bidding
         biddingToken = await MockToken.deploy('BiddingToken', 'BTK');
 
+        // Deploy ProtocolParameters
+        const ProtocolParameters = await ethers.getContractFactory('ProtocolParameters');
+        protocolParameters = await ProtocolParameters.deploy(await owner.getAddress(), await owner.getAddress(), 100);
+
         // Deploy EnglishAuction 
         const EnglishAuction = await ethers.getContractFactory('EnglishAuction');
-        englishAuction = await EnglishAuction.deploy();
+        englishAuction = await EnglishAuction.deploy(await protocolParameters.getAddress());
 
-        // Mint NFT to auctioneer
-        await mockNFT.mint(auctioneer.getAddress(), 1);
+        // Transfer pre-minted NFT from owner to auctioneer
+        await mockNFT.connect(owner).transferFrom(await owner.getAddress(), await auctioneer.getAddress(), 1);
         // Mint tokens to auctioneer
         await mockToken.mint(auctioneer.getAddress(), ethers.parseEther('100'));
 
@@ -170,7 +175,7 @@ describe('EnglishAuction', function () {
         it('should allow valid bids', async function () {
             const bidAmount = ethers.parseEther('1.0');
             await biddingToken.connect(bidder1).approve(englishAuction.getAddress(), bidAmount);
-            await englishAuction.connect(bidder1).placeBid(0, bidAmount);
+            await englishAuction.connect(bidder1).bid(0, bidAmount);
 
             const auction = await englishAuction.auctions(0);
             expect(auction.winner).to.equal(await bidder1.getAddress());
@@ -182,7 +187,7 @@ describe('EnglishAuction', function () {
 
             const bidAmount = ethers.parseEther('1.1');
             await biddingToken.connect(bidder1).approve(englishAuction.getAddress(), bidAmount);
-            await englishAuction.connect(bidder1).placeBid(0, bidAmount);
+            await englishAuction.connect(bidder1).bid(0, bidAmount);
 
             const afterBid = (await englishAuction.auctions(0)).deadline;
             expect(afterBid).to.be.gt(beforeBid);
@@ -192,14 +197,14 @@ describe('EnglishAuction', function () {
         it('should refund previous highest bidder on new highest bid', async function () {
             const initialBid = ethers.parseEther('1.0');
             await biddingToken.connect(bidder1).approve(englishAuction.getAddress(), initialBid);
-            await englishAuction.connect(bidder1).placeBid(0, initialBid);
+            await englishAuction.connect(bidder1).bid(0, initialBid);
             const initialBalance = await biddingToken.balanceOf(await bidder1.getAddress());
             expect(initialBalance).to.equal(ethers.parseEther('100') - initialBid);
 
             // New higher bid
             const newBid = ethers.parseEther('1.2');
             await biddingToken.connect(bidder2).approve(englishAuction.getAddress(), newBid);
-            await englishAuction.connect(bidder2).placeBid(0, newBid);
+            await englishAuction.connect(bidder2).bid(0, newBid);
             const newBalance = await biddingToken.balanceOf(await bidder1.getAddress());
 
             expect(newBalance).to.equal(ethers.parseEther('100')); // Refund previous bid
@@ -228,7 +233,7 @@ describe('EnglishAuction', function () {
         it('should transfer NFT to winner and funds to auctioneer', async function () {
             const bidAmount = ethers.parseEther('1.1');
             await biddingToken.connect(bidder1).approve(englishAuction.getAddress(), bidAmount);
-            await englishAuction.connect(bidder1).placeBid(0, bidAmount);
+            await englishAuction.connect(bidder1).bid(0, bidAmount);
 
             // Fast forward time by 20 seconds (5+10+5 buffer)
             await ethers.provider.send('evm_increaseTime', [20]);
@@ -236,11 +241,11 @@ describe('EnglishAuction', function () {
 
             const auctioneerBalanceBefore = await biddingToken.balanceOf(await auctioneer.getAddress());
 
-            // 1. Winner withdraws auctioned item
-            await englishAuction.connect(bidder1).withdrawItem(0);
+            // 1. Winner claims auctioned item
+            await englishAuction.connect(bidder1).claim(0);
 
             // 2. Auctioneer withdraws funds
-            await englishAuction.connect(auctioneer).withdrawFunds(0);
+            await englishAuction.connect(auctioneer).withdraw(0);
 
             const nftOwner = await mockNFT.ownerOf(1);
             expect(nftOwner).to.equal(await bidder1.getAddress());
@@ -252,16 +257,16 @@ describe('EnglishAuction', function () {
         it('should not allow multiple withdrawals by winner', async function () {
             const bidAmount = ethers.parseEther('1.1');
             await biddingToken.connect(bidder1).approve(englishAuction.getAddress(), bidAmount);
-            await englishAuction.connect(bidder1).placeBid(0, bidAmount);
+            await englishAuction.connect(bidder1).bid(0, bidAmount);
 
             await ethers.provider.send('evm_increaseTime', [20]);
             await ethers.provider.send('evm_mine', []);
 
-            // Winner withdraws auctioned item
-            await englishAuction.connect(bidder1).withdrawItem(0);
+            // Winner claims auctioned item
+            await englishAuction.connect(bidder1).claim(0);
 
-            // Attempt to withdraw again
-            await expect(englishAuction.connect(bidder1).withdrawItem(0)).to.be.revertedWith('Auction had been settled');
+            // Attempt to claim again
+            await expect(englishAuction.connect(bidder1).claim(0)).to.be.revertedWith('Auction had been settled');
         });
     });
 
@@ -286,9 +291,9 @@ describe('EnglishAuction', function () {
 
             const bidAmount = ethers.parseEther('1.5');
             await biddingToken.connect(bidder1).approve(englishAuction.getAddress(), bidAmount);
-            await englishAuction.connect(bidder1).placeBid(0, bidAmount);
+            await englishAuction.connect(bidder1).bid(0, bidAmount);
 
-            await expect(englishAuction.connect(auctioneer).withdrawFunds(0)).to.be.revertedWith('Auction has not ended yet');
+            await expect(englishAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('Auction has not ended yet');
         });
     });
 });
