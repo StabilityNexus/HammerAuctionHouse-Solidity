@@ -131,6 +131,25 @@ describe('EnglishAuction', function () {
             ).to.be.revertedWith('Name must be present');
         });
 
+        it('should reject auction creation with empty auctioned token address', async function () {
+        // Attempt to create an auction with ZeroAddress for auctionedToken
+            await expect(
+                englishAuction.connect(auctioneer).createAuction(
+                    'Test Auction',
+                    'Description',
+                    'https://example.com/image.jpg',
+                    0, // NFT type
+                    ethers.ZeroAddress, // auctionedToken zero address check
+                    1, // tokenId
+                    await biddingToken.getAddress(), // bidding token
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                ),
+            ).to.be.revertedWith('Address must not be zero'); // Matches nonZeroAddress modifier
+        });
+
         it('should reject auction creation with empty bidding token address', async function () {
             await mockNFT.connect(auctioneer).approve(englishAuction.getAddress(), 1);
 
