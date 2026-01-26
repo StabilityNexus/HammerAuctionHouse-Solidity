@@ -128,7 +128,7 @@ describe('EnglishAuction', function () {
                     5,
                     10,
                 ),
-            ).to.be.revertedWith('Name must be present');
+            ).to.be.revertedWith('String must not be empty'); 
         });
 
         it('should reject auction creation with empty auctioned token address', async function () {
@@ -161,13 +161,13 @@ describe('EnglishAuction', function () {
                     0,
                     mockNFT.getAddress(),
                     1,
-                    ZeroAddress, // empty bidding token address
+                    ZeroAddress, // zero address
                     ethers.parseEther('1'),
                     ethers.parseEther('0.1'),
                     5,
                     10,
                 ),
-            ).to.be.revertedWith('Bidding token address must be provided');
+            ).to.be.revertedWith('Address must not be zero'); // Updated Revert String
         });
     });
 
@@ -281,11 +281,13 @@ describe('EnglishAuction', function () {
             await ethers.provider.send('evm_increaseTime', [20]);
             await ethers.provider.send('evm_mine', []);
 
-            // Winner claims auctioned item
+            // First claim succeeds
             await englishAuction.connect(bidder1).claim(0);
 
-            // Attempt to claim again
-            await expect(englishAuction.connect(bidder1).claim(0)).to.be.revertedWith('Auction had been settled');
+            // Second claim should revert
+            await expect(
+                englishAuction.connect(bidder1).claim(0)
+            ).to.be.revertedWith('Auctioned asset has already been claimed'); // Updated Revert String
         });
     });
 
