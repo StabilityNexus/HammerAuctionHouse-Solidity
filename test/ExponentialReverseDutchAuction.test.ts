@@ -1,13 +1,14 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer } from 'ethers';
-import { ExponentialReverseDutchAuction, MockNFT, MockToken } from '../typechain-types';
+import { ExponentialReverseDutchAuction, MockNFT, MockToken, ProtocolParameters } from '../typechain-types';
 
 describe('ExponentialReverseDutchAuction', function () {
     let exponentialReverseDutchAuction: ExponentialReverseDutchAuction;
     let mockNFT: MockNFT;
     let mockToken: MockToken;
     let biddingToken: MockToken;
+    let protocolParameters: ProtocolParameters;
     let owner: Signer;
     let auctioneer: Signer;
     let bidder1: Signer;
@@ -23,10 +24,14 @@ describe('ExponentialReverseDutchAuction', function () {
         mockToken = await MockToken.deploy('MockToken', 'MTK');
         biddingToken = await MockToken.deploy('BiddingToken', 'BTK');
 
-        const ExponentialReverseDutchAuction = await ethers.getContractFactory('ExponentialReverseDutchAuction');
-        exponentialReverseDutchAuction = await ExponentialReverseDutchAuction.deploy();
+        const ProtocolParameters = await ethers.getContractFactory('ProtocolParameters');
+        protocolParameters = await ProtocolParameters.deploy(await owner.getAddress(), await owner.getAddress(), 100);
 
-        await mockNFT.mint(auctioneer.getAddress(), 1);
+        const ExponentialReverseDutchAuction = await ethers.getContractFactory('ExponentialReverseDutchAuction');
+        exponentialReverseDutchAuction = await ExponentialReverseDutchAuction.deploy(await protocolParameters.getAddress());
+
+        // Transfer pre-minted NFT from owner to auctioneer
+        await mockNFT.connect(owner).transferFrom(await owner.getAddress(), await auctioneer.getAddress(), 1);
         await mockToken.mint(auctioneer.getAddress(), ethers.parseEther('100'));
         await biddingToken.mint(bidder1.getAddress(), ethers.parseEther('100'));
         await biddingToken.mint(bidder2.getAddress(), ethers.parseEther('100'));
@@ -36,7 +41,7 @@ describe('ExponentialReverseDutchAuction', function () {
         beforeEach(async function () {
             await mockNFT.connect(auctioneer).approve(exponentialReverseDutchAuction.getAddress(), 1);
 
-            // Create auction with decay factor of 200 (0.2 scaled by 1000)
+            // Create auction with decay factor of 200 (0.2)
             await exponentialReverseDutchAuction.connect(auctioneer).createAuction(
                 'Test Auction',
                 'Test Description',
@@ -68,7 +73,7 @@ describe('ExponentialReverseDutchAuction', function () {
 
             // Attempt withdrawal with calculated price
             await biddingToken.connect(bidder1).approve(exponentialReverseDutchAuction.getAddress(), currentPrice);
-            await exponentialReverseDutchAuction.connect(bidder1).withdrawItem(0);
+            await exponentialReverseDutchAuction.connect(bidder1).bid(0);
 
             const auction = await exponentialReverseDutchAuction.auctions(0);
             expect(auction.winner).to.equal(await bidder1.getAddress());

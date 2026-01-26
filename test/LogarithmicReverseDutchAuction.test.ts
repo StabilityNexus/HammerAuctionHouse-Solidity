@@ -1,13 +1,14 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer } from 'ethers';
-import { LogarithmReverseDutchAuction, MockNFT, MockToken } from '../typechain-types';
+import { LogarithmicReverseDutchAuction, MockNFT, MockToken, ProtocolParameters } from '../typechain-types';
 
-describe('LogarithmReverseDutchAuction', function () {
-    let logarithmReverseDutchAuction: LogarithmReverseDutchAuction;
+describe('LogarithmicReverseDutchAuction', function () {
+    let logarithmicReverseDutchAuction: LogarithmicReverseDutchAuction;
     let mockNFT: MockNFT;
     let mockToken: MockToken;
     let biddingToken: MockToken;
+    let protocolParameters: ProtocolParameters;
     let owner: Signer;
     let auctioneer: Signer;
     let bidder1: Signer;
@@ -23,10 +24,14 @@ describe('LogarithmReverseDutchAuction', function () {
         mockToken = await MockToken.deploy('MockToken', 'MTK');
         biddingToken = await MockToken.deploy('BiddingToken', 'BTK');
 
-        const LogarithmReverseDutchAuction = await ethers.getContractFactory('LogarithmReverseDutchAuction');
-        logarithmReverseDutchAuction = await LogarithmReverseDutchAuction.deploy();
+        const ProtocolParameters = await ethers.getContractFactory('ProtocolParameters');
+        protocolParameters = await ProtocolParameters.deploy(await owner.getAddress(), await owner.getAddress(), 100);
 
-        await mockNFT.mint(auctioneer.getAddress(), 1);
+        const LogarithmicReverseDutchAuction = await ethers.getContractFactory('LogarithmicReverseDutchAuction');
+        logarithmicReverseDutchAuction = await LogarithmicReverseDutchAuction.deploy(await protocolParameters.getAddress());
+
+        // Transfer pre-minted NFT from owner to auctioneer
+        await mockNFT.connect(owner).transferFrom(await owner.getAddress(), await auctioneer.getAddress(), 1);
         await mockToken.mint(auctioneer.getAddress(), ethers.parseEther('100'));
         await biddingToken.mint(bidder1.getAddress(), ethers.parseEther('100'));
         await biddingToken.mint(bidder2.getAddress(), ethers.parseEther('100'));
@@ -34,10 +39,10 @@ describe('LogarithmReverseDutchAuction', function () {
 
     describe('Withdrawals with Logarithmic Decay', function () {
         beforeEach(async function () {
-            await mockNFT.connect(auctioneer).approve(logarithmReverseDutchAuction.getAddress(), 1);
+            await mockNFT.connect(auctioneer).approve(logarithmicReverseDutchAuction.getAddress(), 1);
 
-            // Create auction with decay factor of 200 (0.2 scaled by 1000)
-            await logarithmReverseDutchAuction.connect(auctioneer).createAuction(
+            // Create auction with decay factor of 200 (0.2)
+            await logarithmicReverseDutchAuction.connect(auctioneer).createAuction(
                 'Test Auction',
                 'Test Description',
                 'https://example.com/test.jpg',
@@ -63,17 +68,17 @@ describe('LogarithmReverseDutchAuction', function () {
             // log2(1 + 0.2*10) = log2(3) ≈ 1.58496
             // price = 10 - (9 * 1 / 1.58496) ≈ 10 - 5.678 = 4.322 ETH
             const expectedPrice = ethers.parseEther('4.322');
-            const currentPrice = await logarithmReverseDutchAuction.getCurrentPrice(0);
+            const currentPrice = await logarithmicReverseDutchAuction.getCurrentPrice(0);
 
             // Allow 2% error margin due to log approximation
             const errorMargin = (expectedPrice * BigInt(2)) / BigInt(100);
             expect(currentPrice).to.be.closeTo(expectedPrice, errorMargin);
 
             // Attempt withdrawal with calculated price
-            await biddingToken.connect(bidder1).approve(logarithmReverseDutchAuction.getAddress(), currentPrice);
-            await logarithmReverseDutchAuction.connect(bidder1).withdrawItem(0);
+            await biddingToken.connect(bidder1).approve(logarithmicReverseDutchAuction.getAddress(), currentPrice);
+            await logarithmicReverseDutchAuction.connect(bidder1).bid(0);
 
-            const auction = await logarithmReverseDutchAuction.auctions(0);
+            const auction = await logarithmicReverseDutchAuction.auctions(0);
             expect(auction.winner).to.equal(await bidder1.getAddress());
             expect(await mockNFT.ownerOf(1)).to.equal(await bidder1.getAddress());
         });
@@ -82,8 +87,8 @@ describe('LogarithmReverseDutchAuction', function () {
 
     describe('Price Verification', function () {
         beforeEach(async function () {
-            await mockNFT.connect(auctioneer).approve(logarithmReverseDutchAuction.getAddress(), 1);
-            await logarithmReverseDutchAuction.connect(auctioneer).createAuction(
+            await mockNFT.connect(auctioneer).approve(logarithmicReverseDutchAuction.getAddress(), 1);
+            await logarithmicReverseDutchAuction.connect(auctioneer).createAuction(
                 'Test Auction',
                 'Test Description',
                 'https://example.com/test.jpg',
@@ -116,8 +121,8 @@ describe('LogarithmReverseDutchAuction', function () {
                 await ethers.provider.send('evm_mine', []);
 
                 // Estimate gas for getCurrentPrice
-                const gasEstimate = await logarithmReverseDutchAuction.getCurrentPrice.estimateGas(0);
-                const currentPrice = await logarithmReverseDutchAuction.getCurrentPrice(0);
+                const gasEstimate = await logarithmicReverseDutchAuction.getCurrentPrice.estimateGas(0);
+                const currentPrice = await logarithmicReverseDutchAuction.getCurrentPrice(0);
                 const expectedPrice = ethers.parseEther(checkpoint.expectedPrice);
                 const errorMargin = (expectedPrice * BigInt(1)) / BigInt(100); // 1% error margin for log
 
