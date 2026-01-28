@@ -269,7 +269,35 @@ describe('AllPayAuction', function () {
     });
 
     describe('Withdrawals', function () {
-        it('should allow auctioneer to withdraw accumulated bids', async function () {
+        it('should not allow auctioneer to withdraw before deadline', async function () {
+            await mockNFT.connect(auctioneer).approve(await allPayAuction.getAddress(), 1);
+            await allPayAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    1000, // 1000 second duration
+                    10,
+                );
+
+            const bidAmount = ethers.parseEther('1.5');
+            await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), bidAmount);
+            await allPayAuction.connect(bidder1).bid(0, bidAmount);
+
+            // Attempt immediate withdrawal (before deadline) - should fail
+            await expect(
+                allPayAuction.connect(auctioneer).withdraw(0)
+            ).to.be.revertedWith('Deadline of auction reached');
+        });
+
+        it('should allow auctioneer to withdraw accumulated bids after deadline', async function () {
             await mockNFT.connect(auctioneer).approve(await allPayAuction.getAddress(), 1);
             await allPayAuction
                 .connect(auctioneer)
@@ -290,6 +318,10 @@ describe('AllPayAuction', function () {
             const bidAmount = ethers.parseEther('1.5');
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), bidAmount);
             await allPayAuction.connect(bidder1).bid(0, bidAmount);
+
+            // Fast forward past deadline
+            await ethers.provider.send('evm_increaseTime', [20]);
+            await ethers.provider.send('evm_mine', []);
 
             const balanceBefore = await biddingToken.balanceOf(await auctioneer.getAddress());
             await allPayAuction.connect(auctioneer).withdraw(0);

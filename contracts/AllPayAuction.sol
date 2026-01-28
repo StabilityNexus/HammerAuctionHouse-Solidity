@@ -104,7 +104,7 @@ contract AllPayAuction is Auction {
         emit bidPlaced(auctionId, msg.sender, bids[auctionId][msg.sender]);
     }
 
-    function withdraw(uint256 auctionId) external exists(auctionId) {
+    function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
