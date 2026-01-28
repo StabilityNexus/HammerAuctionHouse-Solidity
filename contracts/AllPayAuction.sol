@@ -106,14 +106,23 @@ contract AllPayAuction is Auction {
 
     function withdraw(uint256 auctionId) external exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
+        require(msg.sender == auction.auctioneer, "Not auctioneer");
+
         uint256 withdrawAmount = auction.availableFunds;
+        require(withdrawAmount > 0, "No funds to withdraw");
+
         auction.availableFunds = 0;
+
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
+
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendERC20(auction.biddingToken,feeRecipient,fees);
+        sendERC20(auction.biddingToken, feeRecipient, fees);
+
         emit Withdrawn(auctionId, withdrawAmount);
     }
+
+
 
     function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
