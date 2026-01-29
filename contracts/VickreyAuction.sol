@@ -98,20 +98,7 @@ contract VickreyAuction is Auction {
             protocolFee: protocolParameters.fee(),
             accumulatedCommitFee: 0
         });
-        emit AuctionCreated(
-            auctionCounter++,
-            name,
-            description,
-            imgUrl,
-            msg.sender,
-            auctionType,
-            auctionedToken,
-            auctionedTokenIdOrAmount,
-            biddingToken,
-            bidCommitEnd,
-            bidRevealEnd,
-            protocolParameters.fee()
-        );
+        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd, protocolParameters.fee());
     }
 
     function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) beforeDeadline(auctions[auctionId].bidCommitEnd) {
