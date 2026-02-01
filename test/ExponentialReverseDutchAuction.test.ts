@@ -41,7 +41,7 @@ describe('ExponentialReverseDutchAuction', function () {
         beforeEach(async function () {
             await mockNFT.connect(auctioneer).approve(exponentialReverseDutchAuction.getAddress(), 1);
 
-            // Create auction with decay factor of 200 (0.2)
+            // Create auction with decay factor of 20000 (0.2)
             await exponentialReverseDutchAuction.connect(auctioneer).createAuction(
                 'Test Auction',
                 'Test Description',
@@ -52,7 +52,7 @@ describe('ExponentialReverseDutchAuction', function () {
                 await biddingToken.getAddress(),
                 ethers.parseEther('10'), // starting price
                 ethers.parseEther('1'), // reserve price
-                200, // decay factor (0.2)
+                20000, // decay factor (0.2)
                 10, // duration
             );
         });
@@ -95,7 +95,7 @@ describe('ExponentialReverseDutchAuction', function () {
                 await biddingToken.getAddress(),
                 ethers.parseEther('10'), // starting price
                 ethers.parseEther('1'), // reserve price
-                200, // decay factor (0.2)
+                20000, // decay factor (0.2)
                 100, // duration 100 seconds
             );
         });

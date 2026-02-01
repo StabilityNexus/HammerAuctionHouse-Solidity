@@ -122,7 +122,7 @@ describe('AllPayAuction', function () {
                     5,
                     10,
                 ),
-            ).to.be.revertedWith('Name must be present');
+            ).to.be.revertedWith('String must not be empty');
         });
 
         it('should reject auction creation with empty bidding token address', async function () {
@@ -142,7 +142,7 @@ describe('AllPayAuction', function () {
                     5,
                     10,
                 ),
-            ).to.be.revertedWith('Bidding token address must be provided');
+            ).to.be.revertedWith('Address must not be zero');
         });
     });
 
@@ -264,7 +264,7 @@ describe('AllPayAuction', function () {
             await allPayAuction.connect(bidder1).claim(0);
 
             // Attempt to claim again
-            await expect(allPayAuction.connect(bidder1).claim(0)).to.be.revertedWith('Auction had been settled');
+            await expect(allPayAuction.connect(bidder1).claim(0)).to.be.revertedWith('Auctioned asset has already been claimed');
         });
     });
 

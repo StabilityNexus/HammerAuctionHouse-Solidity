@@ -123,10 +123,10 @@ describe('LinearReverseDutchAuction', function () {
                     1,
                     await biddingToken.getAddress(),
                     ethers.parseEther('10'),
-                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
                     5,
                 ),
-            ).to.be.revertedWith('Name must be present');
+            ).to.be.revertedWith('String must not be empty');
         });
 
         it('should reject auction creation with empty bidding token address', async function () {
@@ -142,10 +142,10 @@ describe('LinearReverseDutchAuction', function () {
                     1,
                     ZeroAddress, // empty bidding token address
                     ethers.parseEther('10'),
-                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
                     5,
                 ),
-            ).to.be.revertedWith('Bidding token address must be provided');
+            ).to.be.revertedWith('Address must not be zero');
         });
     });
 
@@ -182,7 +182,7 @@ describe('LinearReverseDutchAuction', function () {
 
             // Check that the auction is settled and item is withdrawn
             expect(await mockNFT.ownerOf(1)).to.equal(await bidder1.getAddress());
-            expect(auction.availableFunds).is.equal(bidAmount);
+            expect(auction.availableFunds).is.equal(0);
         });
 
         it('allows successful withdraw of accumulated funds', async function () {

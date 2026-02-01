@@ -79,8 +79,8 @@ describe('VickreyAuction', function () {
             const commitment3 = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid3, salt3]));
 
             // Check that commit fails if not enough or too much ETH sent
-            await expect(vickreyAuction.connect(bidder1).commitBid(auctionId, commitment1, { value: ethers.parseEther('0.0005') })).to.be.revertedWith('Commit fee must be exactly 0.001 ETH');
-            await expect(vickreyAuction.connect(bidder1).commitBid(auctionId, commitment1, { value: ethers.parseEther('0.002') })).to.be.revertedWith('Commit fee must be exactly 0.001 ETH');
+            await expect(vickreyAuction.connect(bidder1).commitBid(auctionId, commitment1, { value: ethers.parseEther('0.0005') })).to.be.revertedWith('Insufficient commit fee');
+            await expect(vickreyAuction.connect(bidder1).commitBid(auctionId, commitment1, { value: ethers.parseEther('0.002') })).to.be.revertedWith('Insufficient commit fee');
 
             // Commit with correct fee and check ETH balance decrease
             const fee = ethers.parseEther('0.001');
@@ -178,7 +178,7 @@ describe('VickreyAuction', function () {
             const bid = ethers.parseEther('1');
             const salt = ethers.randomBytes(32);
             const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
-            await expect(vickreyAuction.connect(bidder1).commitBid(auctionId, commitment, { value: fees })).to.be.revertedWith('The commiting phase has ended!');
+            await expect(vickreyAuction.connect(bidder1).commitBid(auctionId, commitment, { value: fees })).to.be.revertedWith('Deadline of auction reached');
         });
 
         it('does not allow reveal before reveal phase', async function () {
@@ -187,7 +187,7 @@ describe('VickreyAuction', function () {
             const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
             await vickreyAuction.connect(bidder1).commitBid(auctionId, commitment, { value: fees });
             await biddingToken.connect(bidder1).approve(vickreyAuction.getAddress(), bid);
-            await expect(vickreyAuction.connect(bidder1).revealBid(auctionId, bid, salt)).to.be.revertedWith('The commiting phase has not ended yet!');
+            await expect(vickreyAuction.connect(bidder1).revealBid(auctionId, bid, salt)).to.be.revertedWith('Auction has not ended yet');
         });
 
         it('does not allow reveal after reveal phase', async function () {
@@ -199,7 +199,7 @@ describe('VickreyAuction', function () {
             await ethers.provider.send('evm_increaseTime', [bidCommitDuration + bidRevealDuration + 2]);
             await ethers.provider.send('evm_mine', []);
             await biddingToken.connect(bidder1).approve(vickreyAuction.getAddress(), bid);
-            await expect(vickreyAuction.connect(bidder1).revealBid(auctionId, bid, salt)).to.be.revertedWith('The revealing phase has ended!');
+            await expect(vickreyAuction.connect(bidder1).revealBid(auctionId, bid, salt)).to.be.revertedWith('Deadline of auction reached');
         });
 
         it('does not allow withdraw before reveal phase ends', async function () {
@@ -214,7 +214,7 @@ describe('VickreyAuction', function () {
             await vickreyAuction.connect(bidder1).revealBid(auctionId, bid, salt);
 
             // Try to withdraw before reveal phase ends
-            await expect(vickreyAuction.connect(bidder1).claim(auctionId)).to.be.revertedWith('Reveal period has not ended yet');
+            await expect(vickreyAuction.connect(bidder1).claim(auctionId)).to.be.revertedWith('Auction has not ended yet');
         });
     });
 });
