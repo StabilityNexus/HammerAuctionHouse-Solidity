@@ -6,6 +6,7 @@ import './ProtocolParameters.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
 
 /**
  * @title VickreyAuction
@@ -16,7 +17,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * During the reveal phase, bidders reveal their bid amount and salt,and makes the bid transfer.On correct reveal,the fees is refunded.
  */
 
-contract VickreyAuction is Auction {
+contract VickreyAuction is Auction, ReentrancyGuard {
     constructor(address _protocolParametersAddress) Auction(_protocolParametersAddress) {}
     mapping(uint256 => AuctionData) public auctions;
     mapping(uint256 => mapping(address => bytes32)) public commitments;
@@ -115,7 +116,7 @@ contract VickreyAuction is Auction {
         uint256 auctionId,
         uint256 bidAmount,
         bytes32 salt
-    ) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidCommitEnd) beforeDeadline(auctions[auctionId].bidRevealEnd) {
+    ) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidCommitEnd) beforeDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
         require(commitments[auctionId][msg.sender] != bytes32(0), "The sender hadn't commited during commiting phase");
         bytes32 check = keccak256(abi.encodePacked(bidAmount, salt));
@@ -138,16 +139,15 @@ contract VickreyAuction is Auction {
         } else {
             sendERC20(auction.biddingToken, msg.sender, bidAmount); //Not the highest bidder, refund the bid amount
         }
+        auction.accumulatedCommitFee -= auction.commitFee;
         (bool success, ) = msg.sender.call{value: auction.commitFee}(''); //Refund commit fee
         require(success, 'Refund failed');
-        auction.accumulatedCommitFee -= auction.commitFee;
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
-    function cancelAuction(uint256 auctionId) external exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
+    function cancelAuction(uint256 auctionId) external exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
-        require(block.timestamp < auction.bidCommitEnd, "Cannot cancel: commit phase started or ended");
         require(auction.accumulatedCommitFee == 0, "Cannot cancel: commitments exist");
         auction.isClaimed = true;
         auction.bidCommitEnd = block.timestamp; // Set commit end to now, preventing future commits via beforeDeadline modifier
@@ -155,18 +155,19 @@ contract VickreyAuction is Auction {
         emit AuctionCancelled(auctionId, auction.auctioneer);
     }
 
-    function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
+    function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
+        uint256 commitFeeToTransfer = auction.accumulatedCommitFee;
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendERC20(auction.biddingToken, feeRecipient, fees);
         if (auction.accumulatedCommitFee != 0) {
-            (bool success, ) = auction.auctioneer.call{value: auction.accumulatedCommitFee}('');
-            require(success, 'Commit fee withdrawal failed');
             auction.accumulatedCommitFee = 0;
+            (bool success, ) = auction.auctioneer.call{value: commitFeeToTransfer}('');
+            require(success, 'Commit fee withdrawal failed');
         }
         emit Withdrawn(auctionId, withdrawAmount);
     }
