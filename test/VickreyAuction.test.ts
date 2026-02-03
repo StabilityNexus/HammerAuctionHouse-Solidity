@@ -129,11 +129,12 @@ describe('VickreyAuction', function () {
             const winnerBalanceAfter = await biddingToken.balanceOf(await bidder2.getAddress());
             expect(winnerBalanceAfter - winnerBalanceBefore).to.equal(bid2 - bid3);
 
-            // Auctioneer withdraws funds (should be 15 BTK)
+            // Auctioneer withdraws funds (should be 15 BTK minus 1% protocol fee)
             const auctioneerBalanceBefore = await biddingToken.balanceOf(await auctioneer.getAddress());
             await vickreyAuction.connect(auctioneer).withdraw(auctionId);
             const auctioneerBalanceAfter = await biddingToken.balanceOf(await auctioneer.getAddress());
-            expect(auctioneerBalanceAfter - auctioneerBalanceBefore).to.equal(bid3);
+            const protocolFee = (bid3 * 100n) / 10000n; // 1% fee
+            expect(auctioneerBalanceAfter - auctioneerBalanceBefore).to.equal(bid3 - protocolFee);
 
             // NFT ownership transferred to winner
             expect(await mockNFT.ownerOf(1)).to.equal(await bidder2.getAddress());

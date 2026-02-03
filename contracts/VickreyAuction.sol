@@ -123,7 +123,7 @@ contract VickreyAuction is Auction {
         uint256 highestBid = bids[auctionId][auction.winner];
         receiveERC20(auction.biddingToken, msg.sender, bidAmount);
         if (highestBid < bidAmount) {
-            if (highestBid > 0 && auction.winner != msg.sender) {
+            if (highestBid > 0 && auction.winner != msg.sender && auction.winner != auction.auctioneer) {
                 sendERC20(auction.biddingToken, auction.winner, highestBid); //Refund the previous highest bidder(not the auctioneer initially)
             }
             auction.availableFunds = highestBid;
