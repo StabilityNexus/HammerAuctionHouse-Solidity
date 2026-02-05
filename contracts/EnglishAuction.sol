@@ -50,6 +50,7 @@ contract EnglishAuction is Auction {
         uint256 deadlineExtension,
         uint256 protocolFee
     );
+    event AuctionCancelled(uint256 indexed auctionId, address indexed auctioneer);
 
     function createAuction(
         string memory name,
@@ -90,7 +91,7 @@ contract EnglishAuction is Auction {
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
     }
 
-    function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
+    function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         require(auction.highestBid != 0 || bidAmount >= auction.minimumBid, 'First bid should be greater than starting bid');
         require(auction.highestBid == 0 || bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
@@ -116,6 +117,15 @@ contract EnglishAuction is Auction {
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendERC20(auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);
+    }
+
+    function cancelAuction(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+        AuctionData storage auction = auctions[auctionId];
+        require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
+        require(auction.highestBid == 0, "Cannot cancel auction with bids");
+        auction.isClaimed = true;
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
+        emit AuctionCancelled(auctionId, auction.auctioneer);
     }
 
     function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {

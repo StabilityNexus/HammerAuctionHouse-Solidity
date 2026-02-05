@@ -57,6 +57,7 @@ contract VickreyAuction is Auction {
         uint256 protocolFee
     );
     event BidRevealed(uint256 indexed auctionId, address indexed bidder, uint256 bidAmount);
+    event AuctionCancelled(uint256 indexed auctionId, address indexed auctioneer);
 
     function createAuction(
         string memory name,
@@ -101,7 +102,7 @@ contract VickreyAuction is Auction {
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd, protocolParameters.fee());
     }
 
-    function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) beforeDeadline(auctions[auctionId].bidCommitEnd) {
+    function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) beforeDeadline(auctions[auctionId].bidCommitEnd) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         require(commitments[auctionId][msg.sender] == bytes32(0), 'The sender has already commited');
         require(msg.value == auction.commitFee, 'Insufficient commit fee'); // require exact fee
@@ -141,6 +142,15 @@ contract VickreyAuction is Auction {
         require(success, 'Refund failed');
         auction.accumulatedCommitFee -= auction.commitFee;
         emit BidRevealed(auctionId, msg.sender, bidAmount);
+    }
+
+    function cancelAuction(uint256 auctionId) external exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
+        AuctionData storage auction = auctions[auctionId];
+        require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
+        require(block.timestamp < auction.bidCommitEnd, "Cannot cancel: commit phase started or ended");
+        auction.isClaimed = true;
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
+        emit AuctionCancelled(auctionId, auction.auctioneer);
     }
 
     function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {

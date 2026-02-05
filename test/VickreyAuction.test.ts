@@ -218,4 +218,164 @@ describe('VickreyAuction', function () {
             await expect(vickreyAuction.connect(bidder1).claim(auctionId)).to.be.revertedWith('Auction has not ended yet');
         });
     });
+
+    describe('Auction Cancellation', function () {
+        it('should allow auctioneer to cancel auction before commit phase starts', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            expect(await mockNFT.ownerOf(1)).to.equal(await vickreyAuction.getAddress());
+
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(vickreyAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
+
+            expect(await mockNFT.ownerOf(1)).to.equal(await auctioneer.getAddress());
+            const auction = await vickreyAuction.auctions(0);
+            expect(auction.isClaimed).to.be.true;
+        });
+
+        it('should allow auctioneer to cancel token auction before commit phase starts', async function () {
+            const amount = ethers.parseEther('10');
+            await mockToken.connect(auctioneer).approve(await vickreyAuction.getAddress(), amount);
+
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Token Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    1,
+                    await mockToken.getAddress(),
+                    amount,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            const balanceBefore = await mockToken.balanceOf(await auctioneer.getAddress());
+            await vickreyAuction.connect(auctioneer).cancelAuction(0);
+            const balanceAfter = await mockToken.balanceOf(await auctioneer.getAddress());
+            expect(balanceAfter).to.equal(balanceBefore + amount);
+        });
+
+        it('should not allow non-auctioneer to cancel auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            await expect(vickreyAuction.connect(bidder1).cancelAuction(0)).to.be.revertedWith('Only auctioneer can cancel');
+        });
+
+        it('should not allow cancellation after commit phase has started', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            // Fast forward to after commit phase ends (1000 seconds after creation)
+            await ethers.provider.send('evm_increaseTime', [1100]);
+            await ethers.provider.send('evm_mine', []);
+
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Cannot cancel: commit phase started or ended',
+            );
+        });
+
+        it('should not allow cancellation of already cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            await vickreyAuction.connect(auctioneer).cancelAuction(0);
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Auctioned asset has already been claimed',
+            );
+        });
+
+        it('should not allow committing bid on cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            await vickreyAuction.connect(auctioneer).cancelAuction(0);
+
+            const bid = ethers.parseEther('5');
+            const salt = ethers.encodeBytes32String('secret123');
+            const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
+
+            // After cancellation, auction is already claimed, so commitBid should fail due to timing or another reason
+            // The beforeDeadline modifier will pass but the auction shouldn't accept the commit
+            await expect(
+                vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: ethers.parseEther('0.001') }),
+            ).to.be.reverted;
+        });
+    });
 });

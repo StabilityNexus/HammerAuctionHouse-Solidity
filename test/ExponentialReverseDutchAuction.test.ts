@@ -121,4 +121,111 @@ describe('ExponentialReverseDutchAuction', function () {
             }
         });
     });
+
+    describe('Auction Cancellation', function () {
+        it('should allow auctioneer to cancel auction before any bids', async function () {
+            await mockNFT.connect(auctioneer).approve(await exponentialReverseDutchAuction.getAddress(), 1);
+            await exponentialReverseDutchAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('10'),
+                    ethers.parseEther('1'),
+                    20000,
+                    10,
+                );
+
+            expect(await mockNFT.ownerOf(1)).to.equal(await exponentialReverseDutchAuction.getAddress());
+
+            await expect(exponentialReverseDutchAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(exponentialReverseDutchAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
+
+            expect(await mockNFT.ownerOf(1)).to.equal(await auctioneer.getAddress());
+            const auction = await exponentialReverseDutchAuction.auctions(0);
+            expect(auction.isClaimed).to.be.true;
+        });
+
+        it('should not allow non-auctioneer to cancel auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await exponentialReverseDutchAuction.getAddress(), 1);
+            await exponentialReverseDutchAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('10'),
+                    ethers.parseEther('1'),
+                    20000,
+                    10,
+                );
+
+            await expect(exponentialReverseDutchAuction.connect(bidder1).cancelAuction(0)).to.be.revertedWith(
+                'Only auctioneer can cancel',
+            );
+        });
+
+        it('should not allow cancellation after bid is placed', async function () {
+            await mockNFT.connect(auctioneer).approve(await exponentialReverseDutchAuction.getAddress(), 1);
+            await exponentialReverseDutchAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('10'),
+                    ethers.parseEther('1'),
+                    20000,
+                    10,
+                );
+
+            const currentPrice = await exponentialReverseDutchAuction.getCurrentPrice(0);
+            await biddingToken.connect(bidder1).approve(await exponentialReverseDutchAuction.getAddress(), currentPrice);
+            await exponentialReverseDutchAuction.connect(bidder1).bid(0);
+
+            await expect(exponentialReverseDutchAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Cannot cancel auction with bids',
+            );
+        });
+
+        it('should not allow cancellation after deadline', async function () {
+            await mockNFT.connect(auctioneer).approve(await exponentialReverseDutchAuction.getAddress(), 1);
+            await exponentialReverseDutchAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('10'),
+                    ethers.parseEther('1'),
+                    20000,
+                    10,
+                );
+
+            await ethers.provider.send('evm_increaseTime', [15]);
+            await ethers.provider.send('evm_mine', []);
+
+            await expect(exponentialReverseDutchAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Deadline of auction reached',
+            );
+        });
+    });
 });
