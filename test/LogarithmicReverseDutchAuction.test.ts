@@ -130,4 +130,68 @@ describe('LogarithmicReverseDutchAuction', function () {
             }
         });
     });
+
+    describe('Reentrancy Protection', function () {
+        it('should prevent reentrancy attack on bid (which internally calls claim)', async function () {
+            const MaliciousNFTReceiver = await ethers.getContractFactory('MaliciousNFTReceiver');
+            const maliciousReceiver: MaliciousNFTReceiver = await MaliciousNFTReceiver.deploy(await logarithmicReverseDutchAuction.getAddress());
+
+            await mockNFT.connect(auctioneer).approve(await logarithmicReverseDutchAuction.getAddress(), 1);
+            await logarithmicReverseDutchAuction.connect(auctioneer).createAuction(
+                'Test Auction',
+                'Test Description',
+                'https://example.com/test.jpg',
+                0,
+                await mockNFT.getAddress(),
+                1,
+                await biddingToken.getAddress(),
+                ethers.parseEther('10'),
+                ethers.parseEther('1'),
+                20000,
+                100,
+            );
+
+            await ethers.provider.send('evm_increaseTime', [10]);
+            await ethers.provider.send('evm_mine', []);
+
+            await maliciousReceiver.setTargetAuction(0);
+            await biddingToken.mint(await owner.getAddress(), ethers.parseEther('100'));
+            await biddingToken.connect(owner).approve(await logarithmicReverseDutchAuction.getAddress(), ethers.parseEther('10'));
+            
+            await logarithmicReverseDutchAuction.connect(owner).bid(0);
+
+            const nftOwner = await mockNFT.ownerOf(1);
+            expect(nftOwner).to.equal(await owner.getAddress());
+
+            const auction = await logarithmicReverseDutchAuction.auctions(0);
+            expect(auction.isClaimed).to.be.true;
+        });
+
+        it('should prevent reentrancy on external claim call', async function () {
+            await mockNFT.connect(auctioneer).approve(await logarithmicReverseDutchAuction.getAddress(), 1);
+            await logarithmicReverseDutchAuction.connect(auctioneer).createAuction(
+                'Test Auction',
+                'Test Description',
+                'https://example.com/test.jpg',
+                0,
+                await mockNFT.getAddress(),
+                1,
+                await biddingToken.getAddress(),
+                ethers.parseEther('10'),
+                ethers.parseEther('1'),
+                20000,
+                100,
+            );
+
+            await ethers.provider.send('evm_increaseTime', [150]);
+            await ethers.provider.send('evm_mine', []);
+
+            await logarithmicReverseDutchAuction.connect(auctioneer).claim(0);
+            
+            const auction = await logarithmicReverseDutchAuction.auctions(0);
+            expect(auction.isClaimed).to.be.true;
+
+            await expect(logarithmicReverseDutchAuction.connect(auctioneer).claim(0)).to.be.revertedWith('Auctioned asset has already been claimed');
+        });
+    });
 });

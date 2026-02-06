@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer, ZeroAddress } from 'ethers';
-import { LinearReverseDutchAuction, MockNFT, MockToken, ProtocolParameters } from '../typechain-types';
+import { LinearReverseDutchAuction, MockNFT, MockToken, ProtocolParameters, MaliciousNFTReceiver } from '../typechain-types';
 
 describe('LinearReverseDutchAuction', function () {
     let linearReverseDutchAuction: LinearReverseDutchAuction;
@@ -231,6 +231,71 @@ describe('LinearReverseDutchAuction', function () {
 
                 expect(currentPrice).to.be.closeTo(expectedPrice, errorMargin, `Price mismatch at t=${checkpoint.time}s`);
             }
+        });
+    });
+
+    describe('Reentrancy Protection', function () {
+        it('should prevent reentrancy attack on bid (which internally calls claim)', async function () {
+            const MaliciousNFTReceiver = await ethers.getContractFactory('MaliciousNFTReceiver');
+            const maliciousReceiver: MaliciousNFTReceiver = await MaliciousNFTReceiver.deploy(await linearReverseDutchAuction.getAddress());
+
+            await mockNFT.connect(auctioneer).approve(await linearReverseDutchAuction.getAddress(), 1);
+            await linearReverseDutchAuction.connect(auctioneer).createAuction(
+                'Test Auction',
+                'Test Description',
+                'https://example.com/test.jpg',
+                0,
+                await mockNFT.getAddress(),
+                1,
+                await biddingToken.getAddress(),
+                ethers.parseEther('10'),
+                ethers.parseEther('1'),
+                100,
+            );
+
+            await ethers.provider.send('evm_increaseTime', [50]);
+            await ethers.provider.send('evm_mine', []);
+
+            await maliciousReceiver.setTargetAuction(0);
+            await biddingToken.mint(await owner.getAddress(), ethers.parseEther('100'));
+            await biddingToken.connect(owner).approve(await linearReverseDutchAuction.getAddress(), ethers.parseEther('10'));
+            
+            // Bid triggers internal claim - reentrancy guard should protect
+            await linearReverseDutchAuction.connect(owner).bid(0);
+
+            const nftOwner = await mockNFT.ownerOf(1);
+            expect(nftOwner).to.equal(await owner.getAddress());
+
+            const auction = await linearReverseDutchAuction.auctions(0);
+            expect(auction.isClaimed).to.be.true;
+        });
+
+        it('should prevent reentrancy on external claim call', async function () {
+            await mockNFT.connect(auctioneer).approve(await linearReverseDutchAuction.getAddress(), 1);
+            await linearReverseDutchAuction.connect(auctioneer).createAuction(
+                'Test Auction',
+                'Test Description',
+                'https://example.com/test.jpg',
+                0,
+                await mockNFT.getAddress(),
+                1,
+                await biddingToken.getAddress(),
+                ethers.parseEther('10'),
+                ethers.parseEther('1'),
+                100,
+            );
+
+            await ethers.provider.send('evm_increaseTime', [150]);
+            await ethers.provider.send('evm_mine', []);
+
+            // Claim after deadline without bid
+            await linearReverseDutchAuction.connect(auctioneer).claim(0);
+            
+            const auction = await linearReverseDutchAuction.auctions(0);
+            expect(auction.isClaimed).to.be.true;
+
+            // Second claim should fail
+            await expect(linearReverseDutchAuction.connect(auctioneer).claim(0)).to.be.revertedWith('Auctioned asset has already been claimed');
         });
     });
 });
