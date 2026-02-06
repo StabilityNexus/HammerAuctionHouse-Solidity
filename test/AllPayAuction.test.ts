@@ -445,7 +445,7 @@ describe('AllPayAuction', function () {
 
             await allPayAuction.connect(auctioneer).cancelAuction(0);
             await expect(allPayAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
-                'Auctioned asset has already been claimed',
+                'Deadline of auction reached',
             );
         });
 
@@ -471,7 +471,7 @@ describe('AllPayAuction', function () {
 
             const bidAmount = ethers.parseEther('1.5');
             await biddingToken.connect(bidder1).approve(await allPayAuction.getAddress(), bidAmount);
-            await expect(allPayAuction.connect(bidder1).bid(0, bidAmount)).to.be.reverted;
+            await expect(allPayAuction.connect(bidder1).bid(0, bidAmount)).to.be.revertedWith('Deadline of auction reached');
         });
     });
 });

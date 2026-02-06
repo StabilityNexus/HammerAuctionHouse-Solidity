@@ -102,7 +102,7 @@ contract VickreyAuction is Auction {
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd, protocolParameters.fee());
     }
 
-    function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) beforeDeadline(auctions[auctionId].bidCommitEnd) notClaimed(auctions[auctionId].isClaimed) {
+    function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) beforeDeadline(auctions[auctionId].bidCommitEnd) {
         AuctionData storage auction = auctions[auctionId];
         require(commitments[auctionId][msg.sender] == bytes32(0), 'The sender has already commited');
         require(msg.value == auction.commitFee, 'Insufficient commit fee'); // require exact fee
@@ -149,6 +149,7 @@ contract VickreyAuction is Auction {
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
         require(block.timestamp < auction.bidCommitEnd, "Cannot cancel: commit phase started or ended");
         auction.isClaimed = true;
+        auction.bidCommitEnd = block.timestamp; // Set commit end to now, preventing future commits via beforeDeadline modifier
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
         emit AuctionCancelled(auctionId, auction.auctioneer);
     }

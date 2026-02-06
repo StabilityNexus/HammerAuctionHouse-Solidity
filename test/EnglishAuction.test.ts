@@ -459,7 +459,7 @@ describe('EnglishAuction', function () {
 
             // Try to cancel again
             await expect(englishAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
-                'Auctioned asset has already been claimed',
+                'Deadline of auction reached',
             );
         });
 
@@ -487,7 +487,7 @@ describe('EnglishAuction', function () {
             // Try to bid on cancelled auction
             const bidAmount = ethers.parseEther('1.5');
             await biddingToken.connect(bidder1).approve(await englishAuction.getAddress(), bidAmount);
-            await expect(englishAuction.connect(bidder1).bid(0, bidAmount)).to.be.reverted;
+            await expect(englishAuction.connect(bidder1).bid(0, bidAmount)).to.be.revertedWith('Deadline of auction reached');
         });
     });
 });

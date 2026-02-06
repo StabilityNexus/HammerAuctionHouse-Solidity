@@ -91,7 +91,7 @@ contract EnglishAuction is Auction {
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
     }
 
-    function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+    function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
         require(auction.highestBid != 0 || bidAmount >= auction.minimumBid, 'First bid should be greater than starting bid');
         require(auction.highestBid == 0 || bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
@@ -124,6 +124,7 @@ contract EnglishAuction is Auction {
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
         require(auction.highestBid == 0, "Cannot cancel auction with bids");
         auction.isClaimed = true;
+        auction.deadline = block.timestamp; // Set deadline to now, preventing future bids via beforeDeadline modifier
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
         emit AuctionCancelled(auctionId, auction.auctioneer);
     }

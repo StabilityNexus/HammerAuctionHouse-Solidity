@@ -380,7 +380,7 @@ describe('LinearReverseDutchAuction', function () {
 
             await linearReverseDutchAuction.connect(auctioneer).cancelAuction(0);
             await expect(linearReverseDutchAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
-                'Auctioned asset has already been claimed',
+                'Deadline of auction reached',
             );
         });
     });

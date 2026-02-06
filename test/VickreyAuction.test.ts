@@ -371,11 +371,10 @@ describe('VickreyAuction', function () {
             const salt = ethers.encodeBytes32String('secret123');
             const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
 
-            // After cancellation, auction is already claimed, so commitBid should fail due to timing or another reason
-            // The beforeDeadline modifier will pass but the auction shouldn't accept the commit
+            // After cancellation, bidCommitEnd is set to past, so commitBid should fail
             await expect(
                 vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: ethers.parseEther('0.001') }),
-            ).to.be.reverted;
+            ).to.be.revertedWith('Deadline of auction reached');
         });
     });
 });

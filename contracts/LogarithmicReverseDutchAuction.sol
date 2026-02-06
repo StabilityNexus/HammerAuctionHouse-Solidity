@@ -175,11 +175,12 @@ contract LogarithmicReverseDutchAuction is Auction {
         require(auction.winner == auction.auctioneer, "Cannot cancel auction with bids");
         require(!auction.isClaimed, "Auctioned asset has already been claimed");
         auction.isClaimed = true;
+        auction.deadline = block.timestamp; // Set deadline to now, preventing future bids via beforeDeadline modifier
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
         emit AuctionCancelled(auctionId, auction.auctioneer);
     }
     
-    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);
