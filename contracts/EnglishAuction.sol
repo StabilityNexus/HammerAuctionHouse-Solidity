@@ -109,6 +109,7 @@ contract EnglishAuction is Auction {
 
     function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
+        require(msg.sender == auction.auctioneer, "Only auctioneer can withdraw");
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
