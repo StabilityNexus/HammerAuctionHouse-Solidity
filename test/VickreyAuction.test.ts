@@ -347,6 +347,36 @@ describe('VickreyAuction', function () {
             );
         });
 
+        it('should not allow cancellation after commitments have been made', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            // Bidder commits a bid with commit fee
+            const bid = ethers.parseEther('5');
+            const salt = ethers.encodeBytes32String('secret123');
+            const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
+            await vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: ethers.parseEther('0.001') });
+
+            // Auctioneer should not be able to cancel after commitments exist
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Cannot cancel: commitments exist',
+            );
+        });
+
         it('should not allow committing bid on cancelled auction', async function () {
             await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
             await vickreyAuction

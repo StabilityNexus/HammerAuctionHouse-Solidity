@@ -148,6 +148,7 @@ contract VickreyAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
         require(block.timestamp < auction.bidCommitEnd, "Cannot cancel: commit phase started or ended");
+        require(auction.accumulatedCommitFee == 0, "Cannot cancel: commitments exist");
         auction.isClaimed = true;
         auction.bidCommitEnd = block.timestamp; // Set commit end to now, preventing future commits via beforeDeadline modifier
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
