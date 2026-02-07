@@ -256,15 +256,16 @@ describe('LinearReverseDutchAuction', function () {
             await ethers.provider.send('evm_increaseTime', [50]);
             await ethers.provider.send('evm_mine', []);
 
+            // Transfer tokens to malicious contract and have it bid
             await maliciousReceiver.setTargetAuction(0);
-            await biddingToken.mint(await owner.getAddress(), ethers.parseEther('100'));
-            await biddingToken.connect(owner).approve(await linearReverseDutchAuction.getAddress(), ethers.parseEther('10'));
+            await biddingToken.mint(await maliciousReceiver.getAddress(), ethers.parseEther('10'));
             
-            // Bid triggers internal claim - reentrancy guard should protect
-            await linearReverseDutchAuction.connect(owner).bid(0);
+            // Malicious contract bids - this internally calls _claim() and transfers NFT
+            // The NFT transfer triggers onERC721Received which attempts reentrancy
+            await maliciousReceiver.placeBidDutch(await biddingToken.getAddress(), 0, ethers.parseEther('10'));
 
             const nftOwner = await mockNFT.ownerOf(1);
-            expect(nftOwner).to.equal(await owner.getAddress());
+            expect(nftOwner).to.equal(await maliciousReceiver.getAddress());
 
             const auction = await linearReverseDutchAuction.auctions(0);
             expect(auction.isClaimed).to.be.true;

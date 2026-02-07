@@ -47,7 +47,6 @@ contract MaliciousERC20 is ERC20 {
             auctionContract.call(
                 abi.encodeWithSignature("bid(uint256,uint256)", targetAuctionId, amount)
             );
-            // Ignore if it fails
         }
         
         return result;
@@ -62,7 +61,6 @@ contract MaliciousERC20 is ERC20 {
             auctionContract.call(
                 abi.encodeWithSignature("withdraw(uint256)", targetAuctionId)
             );
-            // Ignore if it fails
         }
         
         return result;

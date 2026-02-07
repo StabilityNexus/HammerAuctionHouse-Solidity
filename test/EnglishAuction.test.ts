@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer, ZeroAddress } from 'ethers';
-import { EnglishAuction, MockNFT, MockToken, ProtocolParameters, MaliciousNFTReceiver } from '../typechain-types';
+import { EnglishAuction, MockNFT, MockToken, ProtocolParameters, MaliciousNFTReceiver, MaliciousERC20 } from '../typechain-types';
 
 describe('EnglishAuction', function () {
     let englishAuction: EnglishAuction;
@@ -321,23 +321,23 @@ describe('EnglishAuction', function () {
                     10,
                 );
 
-            // Place bid from regular bidder
-            await biddingToken.connect(bidder1).approve(await englishAuction.getAddress(), ethers.parseEther('1.5'));
-            await englishAuction.connect(bidder1).bid(0, ethers.parseEther('1.5'));
+            // Transfer tokens to malicious contract and have it place the bid
+            const bidAmount = ethers.parseEther('1.5');
+            await biddingToken.connect(bidder1).transfer(await maliciousReceiver.getAddress(), bidAmount);
+            await maliciousReceiver.setTargetAuction(0);
+            await maliciousReceiver.placeBid(await biddingToken.getAddress(), 0, bidAmount);
 
             // Fast forward time
             await ethers.provider.send('evm_increaseTime', [20]);
             await ethers.provider.send('evm_mine', []);
 
-            // Set target for attack
-            await maliciousReceiver.setTargetAuction(0);
-
-            // Claim should succeed despite reentrancy attempt
-            await englishAuction.connect(bidder1).claim(0);
+            // Malicious contract claims - this triggers reentrancy attempt via onERC721Received
+            // Should succeed because ReentrancyGuard blocks the reentrancy
+            await maliciousReceiver.claimAuction(0);
             
-            // Verify NFT was transferred only once
+            // Verify NFT was transferred only once to malicious contract
             const nftOwner = await mockNFT.ownerOf(1);
-            expect(nftOwner).to.equal(await bidder1.getAddress());
+            expect(nftOwner).to.equal(await maliciousReceiver.getAddress());
 
             // Auction should be marked as claimed
             const auction = await englishAuction.auctions(0);
@@ -345,7 +345,11 @@ describe('EnglishAuction', function () {
         });
 
         it('should prevent reentrancy on bid function', async function () {
-            // Create auction
+            // Deploy malicious ERC20 token
+            const MaliciousERC20Factory = await ethers.getContractFactory('MaliciousERC20');
+            const maliciousToken: MaliciousERC20 = await MaliciousERC20Factory.deploy('MaliciousToken', 'MTKN');
+
+            // Create auction with malicious token as bidding token
             await mockNFT.connect(auctioneer).approve(await englishAuction.getAddress(), 1);
             await englishAuction
                 .connect(auctioneer)
@@ -356,29 +360,40 @@ describe('EnglishAuction', function () {
                     0,
                     await mockNFT.getAddress(),
                     1,
-                    await biddingToken.getAddress(),
+                    await maliciousToken.getAddress(),
                     ethers.parseEther('1'),
                     ethers.parseEther('0.1'),
                     5,
                     10,
                 );
 
-            // Place initial bid
-            await biddingToken.connect(bidder1).approve(await englishAuction.getAddress(), ethers.parseEther('1.5'));
+            // Setup: Mint tokens and place first bid
+            await maliciousToken.mint(await bidder1.getAddress(), ethers.parseEther('10'));
+            await maliciousToken.mint(await bidder2.getAddress(), ethers.parseEther('10'));
+            await maliciousToken.connect(bidder1).approve(await englishAuction.getAddress(), ethers.parseEther('1.5'));
             await englishAuction.connect(bidder1).bid(0, ethers.parseEther('1.5'));
 
-            // Place second bid - the refund transfer happens here
-            // Even if token had malicious transfer, reentrancy guard prevents reentry
-            await biddingToken.connect(bidder2).approve(await englishAuction.getAddress(), ethers.parseEther('2.0'));
+            // Configure malicious token to attack during refund transfer
+            await maliciousToken.setAuctionContract(await englishAuction.getAddress());
+            await maliciousToken.setTargetAuction(0);
+            await maliciousToken.enableAttack(await bidder1.getAddress());
+
+            // Place second bid - refund to bidder1 triggers attack, but ReentrancyGuard blocks it
+            await maliciousToken.connect(bidder2).approve(await englishAuction.getAddress(), ethers.parseEther('2.0'));
             await englishAuction.connect(bidder2).bid(0, ethers.parseEther('2.0'));
 
+            // Verify normal operation completed successfully despite attack attempt
             const auction = await englishAuction.auctions(0);
             expect(auction.winner).to.equal(await bidder2.getAddress());
             expect(auction.highestBid).to.equal(ethers.parseEther('2.0'));
         });
 
         it('should prevent reentrancy on withdraw function', async function () {
-            // Create auction
+            // Deploy malicious ERC20 token
+            const MaliciousERC20Factory = await ethers.getContractFactory('MaliciousERC20');
+            const maliciousToken: MaliciousERC20 = await MaliciousERC20Factory.deploy('MaliciousToken', 'MTKN');
+
+            // Create auction with malicious token as bidding token
             await mockNFT.connect(auctioneer).approve(await englishAuction.getAddress(), 1);
             await englishAuction
                 .connect(auctioneer)
@@ -389,33 +404,38 @@ describe('EnglishAuction', function () {
                     0,
                     await mockNFT.getAddress(),
                     1,
-                    await biddingToken.getAddress(),
+                    await maliciousToken.getAddress(),
                     ethers.parseEther('1'),
                     ethers.parseEther('0.1'),
                     5,
                     10,
                 );
 
-            // Place bid
-            await biddingToken.connect(bidder1).approve(await englishAuction.getAddress(), ethers.parseEther('1.5'));
+            // Setup: Mint tokens and place bid
+            await maliciousToken.mint(await bidder1.getAddress(), ethers.parseEther('10'));
+            await maliciousToken.connect(bidder1).approve(await englishAuction.getAddress(), ethers.parseEther('1.5'));
             await englishAuction.connect(bidder1).bid(0, ethers.parseEther('1.5'));
 
             // Fast forward time
             await ethers.provider.send('evm_increaseTime', [20]);
             await ethers.provider.send('evm_mine', []);
 
-            const auctioneerBalanceBefore = await biddingToken.balanceOf(await auctioneer.getAddress());
+            // Configure malicious token to attack during withdrawal transfer
+            await maliciousToken.setAuctionContract(await englishAuction.getAddress());
+            await maliciousToken.setTargetAuction(0);
+            await maliciousToken.enableAttack(await auctioneer.getAddress());
 
-            // Withdraw - should be protected against reentrancy
+            const auctioneerBalanceBefore = await maliciousToken.balanceOf(await auctioneer.getAddress());
+
+            // Withdraw - malicious token tries to re-enter, but ReentrancyGuard blocks it
             await englishAuction.connect(auctioneer).withdraw(0);
 
-            const auctioneerBalanceAfter = await biddingToken.balanceOf(await auctioneer.getAddress());
+            const auctioneerBalanceAfter = await maliciousToken.balanceOf(await auctioneer.getAddress());
             expect(auctioneerBalanceAfter).to.be.gt(auctioneerBalanceBefore);
 
-            // Second withdrawal should fail due to zero available funds
-            await englishAuction.connect(auctioneer).withdraw(0);
-            const auctioneerBalanceFinal = await biddingToken.balanceOf(await auctioneer.getAddress());
-            expect(auctioneerBalanceFinal).to.equal(auctioneerBalanceAfter); // No additional funds
+            // Verify available funds were reset (attack failed)
+            const auction = await englishAuction.auctions(0);
+            expect(auction.availableFunds).to.equal(0);
         });
     });
 });
