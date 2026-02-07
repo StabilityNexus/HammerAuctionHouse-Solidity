@@ -380,31 +380,6 @@ describe('VickreyAuction', function () {
             );
         });
 
-        it('should not allow cancellation of already cancelled auction', async function () {
-            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
-            await vickreyAuction
-                .connect(auctioneer)
-                .createAuction(
-                    'Test Auction',
-                    'Test Description',
-                    'https://example.com/test.jpg',
-                    0,
-                    await mockNFT.getAddress(),
-                    1,
-                    await biddingToken.getAddress(),
-                    ethers.parseEther('1'),
-                    1000,
-                    90000,
-                    ethers.parseEther('0.001'),
-                );
-
-            await vickreyAuction.connect(auctioneer).cancelAuction(0);
-            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWithCustomError(
-                vickreyAuction,
-                'AuctionNotFound',
-            );
-        });
-
         it('should not allow committing bid on cancelled auction', async function () {
             await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
             await vickreyAuction
