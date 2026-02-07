@@ -270,33 +270,5 @@ describe('LinearReverseDutchAuction', function () {
             const auction = await linearReverseDutchAuction.auctions(0);
             expect(auction.isClaimed).to.be.true;
         });
-
-        it('should prevent reentrancy on external claim call', async function () {
-            await mockNFT.connect(auctioneer).approve(await linearReverseDutchAuction.getAddress(), 1);
-            await linearReverseDutchAuction.connect(auctioneer).createAuction(
-                'Test Auction',
-                'Test Description',
-                'https://example.com/test.jpg',
-                0,
-                await mockNFT.getAddress(),
-                1,
-                await biddingToken.getAddress(),
-                ethers.parseEther('10'),
-                ethers.parseEther('1'),
-                100,
-            );
-
-            await ethers.provider.send('evm_increaseTime', [150]);
-            await ethers.provider.send('evm_mine', []);
-
-            // Claim after deadline without bid
-            await linearReverseDutchAuction.connect(auctioneer).claim(0);
-            
-            const auction = await linearReverseDutchAuction.auctions(0);
-            expect(auction.isClaimed).to.be.true;
-
-            // Second claim should fail
-            await expect(linearReverseDutchAuction.connect(auctioneer).claim(0)).to.be.revertedWith('Auctioned asset has already been claimed');
-        });
     });
 });

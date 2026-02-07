@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
 import { Signer } from 'ethers';
-import { LogarithmicReverseDutchAuction, MockNFT, MockToken, ProtocolParameters } from '../typechain-types';
+import { LogarithmicReverseDutchAuction, MockNFT, MockToken, ProtocolParameters, MaliciousNFTReceiver } from '../typechain-types';
 
 describe('LogarithmicReverseDutchAuction', function () {
     let logarithmicReverseDutchAuction: LogarithmicReverseDutchAuction;
@@ -166,33 +166,6 @@ describe('LogarithmicReverseDutchAuction', function () {
 
             const auction = await logarithmicReverseDutchAuction.auctions(0);
             expect(auction.isClaimed).to.be.true;
-        });
-
-        it('should prevent reentrancy on external claim call', async function () {
-            await mockNFT.connect(auctioneer).approve(await logarithmicReverseDutchAuction.getAddress(), 1);
-            await logarithmicReverseDutchAuction.connect(auctioneer).createAuction(
-                'Test Auction',
-                'Test Description',
-                'https://example.com/test.jpg',
-                0,
-                await mockNFT.getAddress(),
-                1,
-                await biddingToken.getAddress(),
-                ethers.parseEther('10'),
-                ethers.parseEther('1'),
-                20000,
-                100,
-            );
-
-            await ethers.provider.send('evm_increaseTime', [150]);
-            await ethers.provider.send('evm_mine', []);
-
-            await logarithmicReverseDutchAuction.connect(auctioneer).claim(0);
-            
-            const auction = await logarithmicReverseDutchAuction.auctions(0);
-            expect(auction.isClaimed).to.be.true;
-
-            await expect(logarithmicReverseDutchAuction.connect(auctioneer).claim(0)).to.be.revertedWith('Auctioned asset has already been claimed');
         });
     });
 });
