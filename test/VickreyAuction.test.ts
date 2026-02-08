@@ -409,6 +409,65 @@ describe('VickreyAuction', function () {
                 vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: ethers.parseEther('0.001') }),
             ).to.be.revertedWith('Deadline of auction reached');
         });
+
+        it('should not allow cancelling an already cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            // Cancel the auction
+            await vickreyAuction.connect(auctioneer).cancelAuction(0);
+
+            // Try to cancel again - should revert because asset already claimed
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.reverted;
+        });
+
+        it('should not allow cancellation after commit phase ends if commitments exist', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            // Bidder commits a bid with commit fee
+            const bid = ethers.parseEther('5');
+            const salt = ethers.encodeBytes32String('secret123');
+            const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
+            await vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: ethers.parseEther('0.001') });
+
+            // Fast forward past commit phase end
+            await ethers.provider.send('evm_increaseTime', [1100]);
+            await ethers.provider.send('evm_mine', []);
+
+            // Auctioneer should not be able to cancel after commitments exist, even after commit phase ends
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Cannot cancel: commitments exist',
+            );
+        });
     });
 
     async function advanceTime(seconds: number) {

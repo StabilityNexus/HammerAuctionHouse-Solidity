@@ -118,7 +118,7 @@ contract LinearReverseDutchAuction is Auction {
         emit AuctionCancelled(auctionId, auction.auctioneer);
     }
 
-    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
+    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);
