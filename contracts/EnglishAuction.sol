@@ -50,7 +50,6 @@ contract EnglishAuction is Auction {
         uint256 deadlineExtension,
         uint256 protocolFee
     );
-    event AuctionCancelled(uint256 indexed auctionId, address indexed auctioneer);
 
     function createAuction(
         string memory name,
@@ -119,7 +118,7 @@ contract EnglishAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function cancelAuction(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+    function cancelAuction(uint256 auctionId) external exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
         require(auction.highestBid == 0, "Cannot cancel auction with bids");

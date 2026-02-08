@@ -54,7 +54,6 @@ contract LogarithmicReverseDutchAuction is Auction {
         uint256 deadline,
         uint256 protocolFee
     );
-    event AuctionCancelled(uint256 indexed auctionId, address indexed auctioneer);
 
     function createAuction(
         string memory name,
@@ -169,11 +168,10 @@ contract LogarithmicReverseDutchAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function cancelAuction(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
+    function cancelAuction(uint256 auctionId) external exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
         require(auction.winner == auction.auctioneer, "Cannot cancel auction with bids");
-        require(!auction.isClaimed, "Auctioned asset has already been claimed");
         auction.isClaimed = true;
         auction.deadline = block.timestamp; // Set deadline to now, preventing future bids via beforeDeadline modifier
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);

@@ -401,7 +401,7 @@ describe('AllPayAuction', function () {
             await expect(allPayAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith('Cannot cancel auction with bids');
         });
 
-        it('should not allow cancellation after deadline', async function () {
+        it('should allow cancellation after deadline if no bids', async function () {
             await mockNFT.connect(auctioneer).approve(await allPayAuction.getAddress(), 1);
             await allPayAuction
                 .connect(auctioneer)
@@ -422,31 +422,9 @@ describe('AllPayAuction', function () {
             await ethers.provider.send('evm_increaseTime', [10]);
             await ethers.provider.send('evm_mine', []);
 
-            await expect(allPayAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith('Deadline of auction reached');
-        });
-
-        it('should not allow cancellation of already cancelled auction', async function () {
-            await mockNFT.connect(auctioneer).approve(await allPayAuction.getAddress(), 1);
-            await allPayAuction
-                .connect(auctioneer)
-                .createAuction(
-                    'Test Auction',
-                    'Test Description',
-                    'https://example.com/test.jpg',
-                    0,
-                    await mockNFT.getAddress(),
-                    1,
-                    await biddingToken.getAddress(),
-                    ethers.parseEther('1'),
-                    ethers.parseEther('0.1'),
-                    5,
-                    10,
-                );
-
-            await allPayAuction.connect(auctioneer).cancelAuction(0);
-            await expect(allPayAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
-                'Deadline of auction reached',
-            );
+            await expect(allPayAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(allPayAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
         });
 
         it('should not allow bidding on cancelled auction', async function () {

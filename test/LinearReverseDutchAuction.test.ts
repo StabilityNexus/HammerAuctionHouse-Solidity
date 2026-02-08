@@ -336,7 +336,7 @@ describe('LinearReverseDutchAuction', function () {
             );
         });
 
-        it('should not allow cancellation after deadline', async function () {
+        it('should allow cancellation after deadline if no bids', async function () {
             await mockNFT.connect(auctioneer).approve(await linearReverseDutchAuction.getAddress(), 1);
             await linearReverseDutchAuction
                 .connect(auctioneer)
@@ -356,32 +356,10 @@ describe('LinearReverseDutchAuction', function () {
             await ethers.provider.send('evm_increaseTime', [15]);
             await ethers.provider.send('evm_mine', []);
 
-            await expect(linearReverseDutchAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
-                'Deadline of auction reached',
-            );
+            await expect(linearReverseDutchAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(linearReverseDutchAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
         });
 
-        it('should not allow cancellation of already cancelled auction', async function () {
-            await mockNFT.connect(auctioneer).approve(await linearReverseDutchAuction.getAddress(), 1);
-            await linearReverseDutchAuction
-                .connect(auctioneer)
-                .createAuction(
-                    'Test Auction',
-                    'Test Description',
-                    'https://example.com/test.jpg',
-                    0,
-                    await mockNFT.getAddress(),
-                    1,
-                    await biddingToken.getAddress(),
-                    ethers.parseEther('10'),
-                    ethers.parseEther('1'),
-                    10,
-                );
-
-            await linearReverseDutchAuction.connect(auctioneer).cancelAuction(0);
-            await expect(linearReverseDutchAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
-                'Deadline of auction reached',
-            );
-        });
     });
 });

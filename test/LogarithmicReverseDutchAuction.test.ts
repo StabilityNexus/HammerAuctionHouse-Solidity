@@ -211,7 +211,7 @@ describe('LogarithmicReverseDutchAuction', function () {
             );
         });
 
-        it('should not allow cancellation after deadline', async function () {
+        it('should allow cancellation after deadline if no bids', async function () {
             await mockNFT.connect(auctioneer).approve(await logarithmicReverseDutchAuction.getAddress(), 1);
             await logarithmicReverseDutchAuction
                 .connect(auctioneer)
@@ -232,9 +232,9 @@ describe('LogarithmicReverseDutchAuction', function () {
             await ethers.provider.send('evm_increaseTime', [15]);
             await ethers.provider.send('evm_mine', []);
 
-            await expect(logarithmicReverseDutchAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
-                'Deadline of auction reached',
-            );
+            await expect(logarithmicReverseDutchAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(logarithmicReverseDutchAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
         });
     });
 });

@@ -58,7 +58,6 @@ contract VickreyAuction is Auction, ReentrancyGuard {
         uint256 protocolFee
     );
     event BidRevealed(uint256 indexed auctionId, address indexed bidder, uint256 bidAmount);
-    event AuctionCancelled(uint256 indexed auctionId, address indexed auctioneer);
 
     function createAuction(
         string memory name,
