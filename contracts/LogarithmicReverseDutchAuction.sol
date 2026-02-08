@@ -167,6 +167,16 @@ contract LogarithmicReverseDutchAuction is Auction {
         sendERC20(auction.biddingToken,feeRecipient,fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
+
+    function cancelAuction(uint256 auctionId) external exists(auctionId) {
+        AuctionData storage auction = auctions[auctionId];
+        require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
+        require(auction.winner == auction.auctioneer, "Cannot cancel auction with bids");
+        auction.isClaimed = true;
+        auction.deadline = block.timestamp; // Set deadline to now, preventing future bids via beforeDeadline modifier
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
+        emit AuctionCancelled(auctionId, auction.auctioneer);
+    }
     
     function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];

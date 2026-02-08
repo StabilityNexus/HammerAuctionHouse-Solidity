@@ -74,9 +74,9 @@ describe('VickreyAuction', function () {
             const salt2 = ethers.randomBytes(32);
             const salt3 = ethers.randomBytes(32);
 
-            const commitment1 = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid1, salt1]));
-            const commitment2 = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid2, salt2]));
-            const commitment3 = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid3, salt3]));
+            const commitment1 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid1, salt1]);
+            const commitment2 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid2, salt2]);
+            const commitment3 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid3, salt3]);
 
             // Check that commit fails if not enough or too much ETH sent
             await expect(vickreyAuction.connect(bidder1).commitBid(auctionId, commitment1, { value: ethers.parseEther('0.0005') })).to.be.revertedWith('Insufficient commit fee');
@@ -147,8 +147,8 @@ describe('VickreyAuction', function () {
             const salt1 = ethers.randomBytes(32);
             const salt2 = ethers.randomBytes(32);
 
-            const commitment1 = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid1, salt1]));
-            const commitment2 = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid2, salt2]));
+            const commitment1 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid1, salt1]);
+            const commitment2 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid2, salt2]);
 
             await vickreyAuction.connect(bidder1).commitBid(auctionId, commitment1, { value: fees });
             await vickreyAuction.connect(bidder2).commitBid(auctionId, commitment2, { value: fees });
@@ -178,14 +178,14 @@ describe('VickreyAuction', function () {
             await ethers.provider.send('evm_mine', []);
             const bid = ethers.parseEther('1');
             const salt = ethers.randomBytes(32);
-            const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
+            const commitment = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid, salt]);
             await expect(vickreyAuction.connect(bidder1).commitBid(auctionId, commitment, { value: fees })).to.be.revertedWith('Deadline of auction reached');
         });
 
         it('does not allow reveal before reveal phase', async function () {
             const bid = ethers.parseEther('1');
             const salt = ethers.randomBytes(32);
-            const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
+            const commitment = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid, salt]);
             await vickreyAuction.connect(bidder1).commitBid(auctionId, commitment, { value: fees });
             await biddingToken.connect(bidder1).approve(vickreyAuction.getAddress(), bid);
             await expect(vickreyAuction.connect(bidder1).revealBid(auctionId, bid, salt)).to.be.revertedWith('Auction has not ended yet');
@@ -194,7 +194,7 @@ describe('VickreyAuction', function () {
         it('does not allow reveal after reveal phase', async function () {
             const bid = ethers.parseEther('1');
             const salt = ethers.randomBytes(32);
-            const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
+            const commitment = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid, salt]);
             await vickreyAuction.connect(bidder1).commitBid(auctionId, commitment, { value: fees });
 
             await ethers.provider.send('evm_increaseTime', [bidCommitDuration + bidRevealDuration + 2]);
@@ -206,7 +206,7 @@ describe('VickreyAuction', function () {
         it('does not allow withdraw before reveal phase ends', async function () {
             const bid = ethers.parseEther('1');
             const salt = ethers.randomBytes(32);
-            const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'bytes32'], [bid, salt]));
+            const commitment = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid, salt]);
             await vickreyAuction.connect(bidder1).commitBid(auctionId, commitment, { value: fees });
 
             await ethers.provider.send('evm_increaseTime', [bidCommitDuration + 1]);
@@ -219,83 +219,333 @@ describe('VickreyAuction', function () {
         });
     });
 
-        async function advanceTime(seconds: number) {
-            await ethers.provider.send('evm_increaseTime', [seconds]);
+    describe('Auction Cancellation', function () {
+        it('should allow auctioneer to cancel auction before commit phase starts', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            expect(await mockNFT.ownerOf(1)).to.equal(await vickreyAuction.getAddress());
+
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(vickreyAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
+
+            expect(await mockNFT.ownerOf(1)).to.equal(await auctioneer.getAddress());
+            const auction = await vickreyAuction.auctions(0);
+            expect(auction.isClaimed).to.be.true;
+        });
+
+        it('should allow auctioneer to cancel token auction before commit phase starts', async function () {
+            const amount = ethers.parseEther('10');
+            await mockToken.connect(auctioneer).approve(await vickreyAuction.getAddress(), amount);
+
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Token Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    1,
+                    await mockToken.getAddress(),
+                    amount,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            const balanceBefore = await mockToken.balanceOf(await auctioneer.getAddress());
+            await vickreyAuction.connect(auctioneer).cancelAuction(0);
+            const balanceAfter = await mockToken.balanceOf(await auctioneer.getAddress());
+            expect(balanceAfter).to.equal(balanceBefore + amount);
+        });
+
+        it('should not allow non-auctioneer to cancel auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            await expect(vickreyAuction.connect(bidder1).cancelAuction(0)).to.be.revertedWith('Only auctioneer can cancel');
+        });
+
+        it('should allow cancellation during commit phase if no commitments', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            // Fast forward to during commit phase (500 seconds after creation)
+            await ethers.provider.send('evm_increaseTime', [500]);
             await ethers.provider.send('evm_mine', []);
-       }
 
-   describe('Reentrancy Regression Tests', function () {
-    const BID_COMMIT_DURATION = 1000;
-    const BID_REVEAL_DURATION = 90000;
-    const COMMIT_FEE = ethers.parseEther('0.1');
-    const BID_AMOUNT_1 = ethers.parseEther('10');
-    const BID_AMOUNT_2 = ethers.parseEther('20');
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(vickreyAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
+        });
 
-    async function createAuction() {
-      await mockNFT.connect(auctioneer).approve(vickreyAuction.getAddress(), 1);
-      await vickreyAuction.connect(auctioneer).createAuction(
-        'Test NFT',
-        'Test Description',
-        'https://example.com/image.jpg',
-        0,
-        await mockNFT.getAddress(),
-        1,
-        await biddingToken.getAddress(),
-        ethers.parseEther('5'),
-        BID_COMMIT_DURATION,
-        BID_REVEAL_DURATION,
-        COMMIT_FEE
-      );
-      return 0;
-    }
+        it('should allow cancellation after commit phase ends if no commitments', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
 
-    async function commitBids(auctionId: number) {
-      const salt1 = ethers.id('salt1');
-      const salt2 = ethers.id('salt2');
+            // Fast forward to after commit phase ends (1100 seconds after creation)
+            await ethers.provider.send('evm_increaseTime', [1100]);
+            await ethers.provider.send('evm_mine', []);
 
-      const commitment1 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [BID_AMOUNT_1, salt1]);
-      const commitment2 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [BID_AMOUNT_2, salt2]);
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(vickreyAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
+        });
 
-      await vickreyAuction.connect(bidder1).commitBid(auctionId, commitment1, { value: COMMIT_FEE });
-      await vickreyAuction.connect(bidder2).commitBid(auctionId, commitment2, { value: COMMIT_FEE });
+        it('should not allow cancellation during commit phase after commitments made', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
 
-      return { salt1, salt2 };
-    }
+            // Bidder commits a bid with commit fee
+            const bid = ethers.parseEther('5');
+            const salt = ethers.encodeBytes32String('secret123');
+            const commitment = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid, salt]);
+            await vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: ethers.parseEther('0.001') });
 
-    it('should update accumulatedCommitFee before external call in revealBid', async function () {
-      const auctionId = await createAuction();
-      const { salt1 } = await commitBids(auctionId);
+            // Auctioneer should not be able to cancel after commitments exist
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Cannot cancel: commitments exist',
+            );
+        });
 
-      await advanceTime(BID_COMMIT_DURATION + 1);
+        it('should not allow committing bid on cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
 
-      const before = await vickreyAuction.auctions(auctionId);
-      expect(before.accumulatedCommitFee).to.equal(COMMIT_FEE * 2n);
-      await biddingToken.connect(bidder1).approve(vickreyAuction.getAddress(), BID_AMOUNT_1);
-      await vickreyAuction.connect(bidder1).revealBid(auctionId, BID_AMOUNT_1, salt1);
+            await vickreyAuction.connect(auctioneer).cancelAuction(0);
 
-      const after = await vickreyAuction.auctions(auctionId);
-      expect(after.accumulatedCommitFee).to.equal(COMMIT_FEE);
+            const bid = ethers.parseEther('5');
+            const salt = ethers.encodeBytes32String('secret123');
+            const commitment = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid, salt]);
+
+            // After cancellation, bidCommitEnd is set to past, so commitBid should fail
+            await expect(
+                vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: ethers.parseEther('0.001') }),
+            ).to.be.revertedWith('Deadline of auction reached');
+        });
+
+        it('should not allow cancelling an already cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            // Cancel the auction
+            await vickreyAuction.connect(auctioneer).cancelAuction(0);
+
+            // Try to cancel again - should revert because asset already claimed
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.reverted;
+        });
+
+        it('should not allow cancellation after commit phase ends if commitments exist', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            // Bidder commits a bid with commit fee
+            const bid = ethers.parseEther('5');
+            const salt = ethers.encodeBytes32String('secret123');
+            const commitment = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid, salt]);
+            await vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: ethers.parseEther('0.001') });
+
+            // Fast forward past commit phase end
+            await ethers.provider.send('evm_increaseTime', [1100]);
+            await ethers.provider.send('evm_mine', []);
+
+            // Auctioneer should not be able to cancel after commitments exist, even after commit phase ends
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Cannot cancel: commitments exist',
+            );
+        });
     });
 
-    it('should update accumulatedCommitFee to 0 before external call in withdraw', async function () {
-      const auctionId = await createAuction();
-      const { salt1, salt2 } = await commitBids(auctionId);
+    async function advanceTime(seconds: number) {
+        await ethers.provider.send('evm_increaseTime', [seconds]);
+        await ethers.provider.send('evm_mine', []);
+    }
 
-      await advanceTime(BID_COMMIT_DURATION + 1);
+    describe('Reentrancy Regression Tests', function () {
+        const BID_COMMIT_DURATION = 1000;
+        const BID_REVEAL_DURATION = 90000;
+        const COMMIT_FEE = ethers.parseEther('0.1');
+        const BID_AMOUNT_1 = ethers.parseEther('10');
+        const BID_AMOUNT_2 = ethers.parseEther('20');
 
-      await biddingToken.connect(bidder1).approve(vickreyAuction.getAddress(), BID_AMOUNT_1);
-      await biddingToken.connect(bidder2).approve(vickreyAuction.getAddress(), BID_AMOUNT_2);
+        async function createAuction() {
+            await mockNFT.connect(auctioneer).approve(vickreyAuction.getAddress(), 1);
+            await vickreyAuction.connect(auctioneer).createAuction(
+                'Test NFT',
+                'Test Description',
+                'https://example.com/image.jpg',
+                0,
+                await mockNFT.getAddress(),
+                1,
+                await biddingToken.getAddress(),
+                ethers.parseEther('5'),
+                BID_COMMIT_DURATION,
+                BID_REVEAL_DURATION,
+                COMMIT_FEE
+            );
+            return 0;
+        }
 
-      await vickreyAuction.connect(bidder1).revealBid(auctionId, BID_AMOUNT_1, salt1);
-      await vickreyAuction.connect(bidder2).revealBid(auctionId, BID_AMOUNT_2, salt2);
+        async function commitBids(auctionId: number) {
+            const salt1 = ethers.id('salt1');
+            const salt2 = ethers.id('salt2');
 
-      await advanceTime(BID_REVEAL_DURATION + 1);
+            const commitment1 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [BID_AMOUNT_1, salt1]);
+            const commitment2 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [BID_AMOUNT_2, salt2]);
 
-      await vickreyAuction.connect(auctioneer).withdraw(auctionId);
+            await vickreyAuction.connect(bidder1).commitBid(auctionId, commitment1, { value: COMMIT_FEE });
+            await vickreyAuction.connect(bidder2).commitBid(auctionId, commitment2, { value: COMMIT_FEE });
 
-      const after = await vickreyAuction.auctions(auctionId);
-      expect(after.accumulatedCommitFee).to.equal(0);
+            return { salt1, salt2 };
+        }
+
+        it('should update accumulatedCommitFee before external call in revealBid', async function () {
+            const auctionId = await createAuction();
+            const { salt1 } = await commitBids(auctionId);
+
+            await advanceTime(BID_COMMIT_DURATION + 1);
+
+            const before = await vickreyAuction.auctions(auctionId);
+            expect(before.accumulatedCommitFee).to.equal(COMMIT_FEE * 2n);
+            await biddingToken.connect(bidder1).approve(vickreyAuction.getAddress(), BID_AMOUNT_1);
+            await vickreyAuction.connect(bidder1).revealBid(auctionId, BID_AMOUNT_1, salt1);
+
+            const after = await vickreyAuction.auctions(auctionId);
+            expect(after.accumulatedCommitFee).to.equal(COMMIT_FEE);
+        });
+
+        it('should update accumulatedCommitFee to 0 before external call in withdraw', async function () {
+            const auctionId = await createAuction();
+            const { salt1, salt2 } = await commitBids(auctionId);
+
+            await advanceTime(BID_COMMIT_DURATION + 1);
+
+            await biddingToken.connect(bidder1).approve(vickreyAuction.getAddress(), BID_AMOUNT_1);
+            await biddingToken.connect(bidder2).approve(vickreyAuction.getAddress(), BID_AMOUNT_2);
+
+            await vickreyAuction.connect(bidder1).revealBid(auctionId, BID_AMOUNT_1, salt1);
+            await vickreyAuction.connect(bidder2).revealBid(auctionId, BID_AMOUNT_2, salt2);
+
+            await advanceTime(BID_REVEAL_DURATION + 1);
+
+            await vickreyAuction.connect(auctioneer).withdraw(auctionId);
+
+            const after = await vickreyAuction.auctions(auctionId);
+            expect(after.accumulatedCommitFee).to.equal(0);
+        });
     });
-  });
-
 });

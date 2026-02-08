@@ -296,4 +296,173 @@ describe('EnglishAuction', function () {
             await expect(englishAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('Auction has not ended yet');
         });
     });
+
+    describe('Auction Cancellation', function () {
+        it('should allow auctioneer to cancel auction before any bids', async function () {
+            await mockNFT.connect(auctioneer).approve(await englishAuction.getAddress(), 1);
+            await englishAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                );
+
+            // NFT should be in contract
+            expect(await mockNFT.ownerOf(1)).to.equal(await englishAuction.getAddress());
+
+            // Cancel auction
+            await expect(englishAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(englishAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
+
+            // NFT should be returned to auctioneer
+            expect(await mockNFT.ownerOf(1)).to.equal(await auctioneer.getAddress());
+
+            // Auction should be marked as claimed
+            const auction = await englishAuction.auctions(0);
+            expect(auction.isClaimed).to.be.true;
+        });
+
+        it('should allow auctioneer to cancel token auction before any bids', async function () {
+            const amount = ethers.parseEther('10');
+            await mockToken.connect(auctioneer).approve(await englishAuction.getAddress(), amount);
+
+            await englishAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Token Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    1,
+                    await mockToken.getAddress(),
+                    amount,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                );
+
+            const balanceBefore = await mockToken.balanceOf(await auctioneer.getAddress());
+
+            // Cancel auction
+            await englishAuction.connect(auctioneer).cancelAuction(0);
+
+            // Tokens should be returned to auctioneer
+            const balanceAfter = await mockToken.balanceOf(await auctioneer.getAddress());
+            expect(balanceAfter).to.equal(balanceBefore + amount);
+        });
+
+        it('should not allow non-auctioneer to cancel auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await englishAuction.getAddress(), 1);
+            await englishAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                );
+
+            await expect(englishAuction.connect(bidder1).cancelAuction(0)).to.be.revertedWith('Only auctioneer can cancel');
+        });
+
+        it('should not allow cancellation after bid is placed', async function () {
+            await mockNFT.connect(auctioneer).approve(await englishAuction.getAddress(), 1);
+            await englishAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                );
+
+            // Place a bid
+            const bidAmount = ethers.parseEther('1.5');
+            await biddingToken.connect(bidder1).approve(await englishAuction.getAddress(), bidAmount);
+            await englishAuction.connect(bidder1).bid(0, bidAmount);
+
+            await expect(englishAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Cannot cancel auction with bids',
+            );
+        });
+
+        it('should allow cancellation after deadline if no bids', async function () {
+            await mockNFT.connect(auctioneer).approve(await englishAuction.getAddress(), 1);
+            await englishAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                );
+
+            // Fast forward past deadline
+            await ethers.provider.send('evm_increaseTime', [10]);
+            await ethers.provider.send('evm_mine', []);
+
+            await expect(englishAuction.connect(auctioneer).cancelAuction(0))
+                .to.emit(englishAuction, 'AuctionCancelled')
+                .withArgs(0, await auctioneer.getAddress());
+        });
+
+        it('should not allow bidding on cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await englishAuction.getAddress(), 1);
+            await englishAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                );
+
+            // Cancel auction
+            await englishAuction.connect(auctioneer).cancelAuction(0);
+
+            // Try to bid on cancelled auction
+            const bidAmount = ethers.parseEther('1.5');
+            await biddingToken.connect(bidder1).approve(await englishAuction.getAddress(), bidAmount);
+            await expect(englishAuction.connect(bidder1).bid(0, bidAmount)).to.be.revertedWith('Deadline of auction reached');
+        });
+    });
 });
