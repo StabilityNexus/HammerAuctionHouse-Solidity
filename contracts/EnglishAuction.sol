@@ -118,6 +118,16 @@ contract EnglishAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
+    function cancelAuction(uint256 auctionId) external exists(auctionId) {
+        AuctionData storage auction = auctions[auctionId];
+        require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
+        require(auction.highestBid == 0, "Cannot cancel auction with bids");
+        auction.isClaimed = true;
+        auction.deadline = block.timestamp; // Set deadline to now, preventing future bids via beforeDeadline modifier
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
+        emit AuctionCancelled(auctionId, auction.auctioneer);
+    }
+
     function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.isClaimed = true;
