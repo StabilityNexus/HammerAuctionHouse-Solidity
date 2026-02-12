@@ -108,22 +108,26 @@ contract LinearReverseDutchAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+    function bid(uint256 auctionId) external nonReentrant exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);
         receiveERC20(auction.biddingToken, msg.sender, currentPrice);
         auction.availableFunds = currentPrice;
         auction.settlePrice = currentPrice;
-        claim(auctionId);
+        _claim(auctionId);
         withdraw(auctionId);
     }
 
-    function claim(uint256 auctionId) public exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
+    function _claim(uint256 auctionId) internal {
         AuctionData storage auction = auctions[auctionId];
         require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, "Invalid call");
         auction.isClaimed = true;
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
+    }
+
+    function claim(uint256 auctionId) public nonReentrant exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
+        _claim(auctionId);
     }
 }
