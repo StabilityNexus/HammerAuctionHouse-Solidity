@@ -6,14 +6,22 @@ import './ProtocolParameters.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-
+import '@openzeppelin/contracts/access/Ownable.sol';
+import '@openzeppelin/contracts/utils/Pausable.sol';
 /**
  * @title LinearReverseDutchAuction
  * @notice Auction contract for NFT and token auctions, where price decreases linearly over time from starting price to reserve price.
  * The first bidder to meet the current price wins the auction.
  */
-contract LinearReverseDutchAuction is Auction {
-    constructor(address _protocolParametersAddress) Auction(_protocolParametersAddress) {}
+contract LinearReverseDutchAuction is Auction, Ownable, Pausable {
+    constructor(address _protocolParametersAddress) Auction(_protocolParametersAddress) Ownable(msg.sender) {}
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
     mapping(uint256 => AuctionData) public auctions;
     struct AuctionData {
         uint256 id;
@@ -87,7 +95,21 @@ contract LinearReverseDutchAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, minPrice, deadline, protocolParameters.fee());
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            auctionedTokenIdOrAmount,
+            biddingToken,
+            startingPrice,
+            minPrice,
+            deadline,
+            protocolParameters.fee()
+        );
     }
 
     function getCurrentPrice(uint256 auctionId) public view exists(auctionId) returns (uint256) {
@@ -108,7 +130,7 @@ contract LinearReverseDutchAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function bid(uint256 auctionId) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+    function bid(uint256 auctionId) external whenNotPaused exists(auctionId) beforeDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);
@@ -119,9 +141,9 @@ contract LinearReverseDutchAuction is Auction {
         withdraw(auctionId);
     }
 
-    function claim(uint256 auctionId) public exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
+    function claim(uint256 auctionId) public whenNotPaused exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, "Invalid call");
+        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, 'Invalid call');
         auction.isClaimed = true;
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
