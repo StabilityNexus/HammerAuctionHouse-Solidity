@@ -12,7 +12,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * @notice Auction contract for NFT and token auctions, where the highest bidder wins the auction and rest of the bidders get their bid refunded.
  */
 contract EnglishAuction is Auction {
-    constructor (address _protocolParametersAddress) Auction(_protocolParametersAddress){}
+    constructor(address _protocolParametersAddress) Auction(_protocolParametersAddress) {}
     mapping(uint256 => AuctionData) public auctions;
     struct AuctionData {
         uint256 id;
@@ -65,6 +65,8 @@ contract EnglishAuction is Auction {
         uint256 deadlineExtension
     ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
         require(duration > 0, 'Duration must be greater than zero seconds');
+        require(minimumBid > 0, 'minimumBid must be > 0');
+        require(minBidDelta > 0, 'minBidDelta must be > 0');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;
         auctions[auctionCounter] = AuctionData({
@@ -87,24 +89,54 @@ contract EnglishAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            auctionedTokenIdOrAmount,
+            biddingToken,
+            minimumBid,
+            minBidDelta,
+            deadline,
+            deadlineExtension,
+            protocolParameters.fee()
+        );
     }
 
     function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
+
+        // First bid validation
         require(auction.highestBid != 0 || bidAmount >= auction.minimumBid, 'First bid should be greater than starting bid');
+
+        // Increment validation
         require(auction.highestBid == 0 || bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
-        receiveERC20(auction.biddingToken, msg.sender, bidAmount);
-        uint256 refund = auction.highestBid;
+
+        //  Capture actual tokens received (supports fee-on-transfer tokens)
+        uint256 actualReceived = receiveERC20(auction.biddingToken, msg.sender, bidAmount);
+
+        // Refund previous highest bidder
+        uint256 previousHighest = auction.highestBid;
         address previousWinner = auction.winner;
+
         auction.winner = msg.sender;
-        auction.highestBid = bidAmount;
-        if (refund != 0) {
-            sendERC20(auction.biddingToken, previousWinner, refund);
+        auction.highestBid = actualReceived;
+
+        if (previousHighest != 0) {
+            sendERC20(auction.biddingToken, previousWinner, previousHighest);
         }
-        auction.availableFunds = bidAmount;
+
+        // Track only what contract actually received
+        auction.availableFunds = actualReceived;
+
+        // Extend deadline
         auction.deadline += auction.deadlineExtension;
-        emit bidPlaced(auctionId, msg.sender, bidAmount);
+
+        emit bidPlaced(auctionId, msg.sender, actualReceived);
     }
 
     function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) {
@@ -114,7 +146,7 @@ contract EnglishAuction is Auction {
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendERC20(auction.biddingToken,feeRecipient,fees);
+        sendERC20(auction.biddingToken, feeRecipient, fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
 

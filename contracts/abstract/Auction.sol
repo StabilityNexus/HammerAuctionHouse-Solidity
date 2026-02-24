@@ -41,12 +41,12 @@ abstract contract Auction is IERC721Receiver {
     }
 
     modifier beforeDeadline(uint256 deadline) {
-        require(block.timestamp < deadline , "Deadline of auction reached");
+        require(block.timestamp < deadline, 'Deadline of auction reached');
         _;
     }
 
-    modifier notClaimed(bool isClaimed){
-        require(!isClaimed, "Auctioned asset has already been claimed");
+    modifier notClaimed(bool isClaimed) {
+        require(!isClaimed, 'Auctioned asset has already been claimed');
         _;
     }
 
@@ -87,8 +87,16 @@ abstract contract Auction is IERC721Receiver {
         IERC721(token).safeTransferFrom(from, address(this), tokenId);
     }
 
-    function receiveERC20(address token, address from, uint256 tokenAmount) internal {
-        SafeERC20.safeTransferFrom(IERC20(token), from, address(this), tokenAmount);
+    function receiveERC20(address token, address from, uint256 expectedAmount) internal returns (uint256 actualReceived) {
+        uint256 balanceBefore = IERC20(token).balanceOf(address(this));
+
+        SafeERC20.safeTransferFrom(IERC20(token), from, address(this), expectedAmount);
+
+        uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+
+        actualReceived = balanceAfter - balanceBefore;
+
+        require(actualReceived > 0, 'No tokens received');
     }
 
     // Used in allowing the contract to receive ERC721 tokens through SafeTransfer.

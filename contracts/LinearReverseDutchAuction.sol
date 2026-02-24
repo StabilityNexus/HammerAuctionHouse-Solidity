@@ -87,7 +87,21 @@ contract LinearReverseDutchAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, minPrice, deadline, protocolParameters.fee());
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            auctionedTokenIdOrAmount,
+            biddingToken,
+            startingPrice,
+            minPrice,
+            deadline,
+            protocolParameters.fee()
+        );
     }
 
     function getCurrentPrice(uint256 auctionId) public view exists(auctionId) returns (uint256) {
@@ -112,16 +126,17 @@ contract LinearReverseDutchAuction is Auction {
         AuctionData storage auction = auctions[auctionId];
         auction.winner = msg.sender;
         uint256 currentPrice = getCurrentPrice(auctionId);
-        receiveERC20(auction.biddingToken, msg.sender, currentPrice);
-        auction.availableFunds = currentPrice;
-        auction.settlePrice = currentPrice;
+        uint256 actualReceived = receiveERC20(auction.biddingToken, msg.sender, currentPrice);
+
+        auction.availableFunds = actualReceived;
+        auction.settlePrice = actualReceived;
         claim(auctionId);
         withdraw(auctionId);
     }
 
     function claim(uint256 auctionId) public exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, "Invalid call");
+        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, 'Invalid call');
         auction.isClaimed = true;
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
