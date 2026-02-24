@@ -10,9 +10,11 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 /**
  * @title Auction
  * @notice Abstract contract for auction types
- * @dev This contract defines the basic structure and events for different auction types.
+ * @dev Defines base logic shared by different auction implementations
  */
 abstract contract Auction is IERC721Receiver {
+    using SafeERC20 for IERC20;
+
     uint256 public auctionCounter = 0;
     ProtocolParameters protocolParameters;
 
@@ -22,7 +24,12 @@ abstract contract Auction is IERC721Receiver {
     }
 
     event Withdrawn(uint256 indexed auctionId, uint256 amountWithdrawn);
-    event Claimed(uint256 indexed auctionId, address withdrawer, address auctionedTokenAddress, uint256 auctionedTokenIdOrAmount);
+    event Claimed(
+        uint256 indexed auctionId,
+        address withdrawer,
+        address auctionedTokenAddress,
+        uint256 auctionedTokenIdOrAmount
+    );
     event bidPlaced(uint256 indexed auctionId, address bidder, uint256 bidAmount);
 
     modifier exists(uint256 auctionId) {
@@ -55,11 +62,22 @@ abstract contract Auction is IERC721Receiver {
         _;
     }
 
-    constructor(address _protocolParametersAddress) nonZeroAddress(_protocolParametersAddress) {
+    constructor(address _protocolParametersAddress)
+        nonZeroAddress(_protocolParametersAddress)
+    {
         protocolParameters = ProtocolParameters(_protocolParametersAddress);
     }
 
-    function sendFunds(bool isNFT, address token, address to, uint256 tokenIdOrAmount) internal {
+    /* ============================================================
+                            FUND HANDLING
+       ============================================================ */
+
+    function sendFunds(
+        bool isNFT,
+        address token,
+        address to,
+        uint256 tokenIdOrAmount
+    ) internal {
         if (isNFT) {
             sendNFT(token, to, tokenIdOrAmount);
         } else {
@@ -67,11 +85,27 @@ abstract contract Auction is IERC721Receiver {
         }
     }
 
-    function receiveFunds(bool isNFT, address token, address from, uint256 tokenIdOrAmount) internal {
+    /**
+     * @dev Receives funds and returns actual received amount.
+     *      For ERC20 tokens, rejects fee-on-transfer tokens.
+     */
+    function receiveFunds(
+        bool isNFT,
+        address token,
+        address from,
+        uint256 tokenIdOrAmount
+    ) internal returns (uint256 actualReceived) {
         if (isNFT) {
             receiveNFT(token, from, tokenIdOrAmount);
+            actualReceived = tokenIdOrAmount;
         } else {
-            receiveERC20(token, from, tokenIdOrAmount);
+            actualReceived = receiveERC20(token, from, tokenIdOrAmount);
+
+            // Strict mode: reject deflationary tokens
+            require(
+                actualReceived == tokenIdOrAmount,
+                "Auction: fee-on-transfer tokens not supported"
+            );
         }
     }
 
@@ -80,27 +114,43 @@ abstract contract Auction is IERC721Receiver {
     }
 
     function sendERC20(address token, address to, uint256 tokenAmount) internal {
-        SafeERC20.safeTransfer(IERC20(token), to, tokenAmount);
+        IERC20(token).safeTransfer(to, tokenAmount);
     }
 
     function receiveNFT(address token, address from, uint256 tokenId) internal {
         IERC721(token).safeTransferFrom(from, address(this), tokenId);
     }
 
-    function receiveERC20(address token, address from, uint256 expectedAmount) internal returns (uint256 actualReceived) {
+    /**
+     * @dev Receives ERC20 tokens and returns actual amount received.
+     *      Protects against fee-on-transfer tokens.
+     */
+    function receiveERC20(
+        address token,
+        address from,
+        uint256 expectedAmount
+    ) internal returns (uint256 actualReceived) {
         uint256 balanceBefore = IERC20(token).balanceOf(address(this));
 
-        SafeERC20.safeTransferFrom(IERC20(token), from, address(this), expectedAmount);
+        IERC20(token).safeTransferFrom(from, address(this), expectedAmount);
 
         uint256 balanceAfter = IERC20(token).balanceOf(address(this));
 
         actualReceived = balanceAfter - balanceBefore;
 
-        require(actualReceived > 0, 'No tokens received');
+        require(actualReceived > 0, "Auction: no tokens received");
     }
 
-    // Used in allowing the contract to receive ERC721 tokens through SafeTransfer.
-    function onERC721Received(address, address, uint256, bytes memory) public virtual override returns (bytes4) {
+    /* ============================================================
+                        ERC721 RECEIVER
+       ============================================================ */
+
+    function onERC721Received(
+        address,
+        address,
+        uint256,
+        bytes memory
+    ) public virtual override returns (bytes4) {
         return IERC721Receiver.onERC721Received.selector;
     }
 }
