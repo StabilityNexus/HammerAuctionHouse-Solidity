@@ -99,7 +99,20 @@ contract VickreyAuction is Auction, ReentrancyGuard {
             protocolFee: protocolParameters.fee(),
             accumulatedCommitFee: 0
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd, protocolParameters.fee());
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            auctionedTokenIdOrAmount,
+            biddingToken,
+            bidCommitEnd,
+            bidRevealEnd,
+            protocolParameters.fee()
+        );
     }
 
     function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) beforeDeadline(auctions[auctionId].bidCommitEnd) {
@@ -163,10 +176,22 @@ contract VickreyAuction is Auction, ReentrancyGuard {
 
     function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
+
+        // 🔐 Ensure NFT escrow
+        if (auction.auctionType == AuctionType.NFT) {
+            require(IERC721(auction.auctionedToken).ownerOf(auction.auctionedTokenIdOrAmount) == address(this), 'NFT not escrowed');
+        }
+
         auction.isClaimed = true;
+
         uint256 refund = bids[auctionId][auction.winner] - auction.winningBid;
-        if (refund != 0) sendERC20(auction.biddingToken, auction.winner, refund);
+
+        if (refund != 0) {
+            sendERC20(auction.biddingToken, auction.winner, refund);
+        }
+
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }
