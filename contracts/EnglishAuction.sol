@@ -65,7 +65,7 @@ contract EnglishAuction is Auction {
         uint256 deadlineExtension
     ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
         require(duration > 0, 'Duration must be greater than zero seconds');
-        require(duration > 0, 'Duration must be greater than zero seconds');
+       require(minimumBid > 0, "minimumBid must be > 0");
         require(minBidDelta > 0, 'minBidDelta must be > 0');
         receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
         uint256 deadline = block.timestamp + duration;

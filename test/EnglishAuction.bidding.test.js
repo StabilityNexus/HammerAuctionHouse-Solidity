@@ -80,4 +80,21 @@ describe('EnglishAuction - Bidding Invariants', function () {
     it('4️⃣ minBidDelta == 0 should revert', async function () {
         await expect(createAuction(0)).to.be.revertedWith('minBidDelta must be > 0');
     });
+    it("5️⃣ minimumBid == 0 should revert", async function () {
+  await expect(
+    auction.connect(seller).createAuction(
+      "Test",
+      "Test Desc",
+      "img",
+      1,
+      token.target,
+      ethers.parseEther("100"),
+      token.target,
+      0, // minimumBid = 0
+      ethers.parseEther("1"),
+      3600,
+      0
+    )
+  ).to.be.revertedWith("minimumBid must be > 0");
+});
 });
