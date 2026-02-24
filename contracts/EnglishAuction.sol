@@ -90,22 +90,46 @@ contract EnglishAuction is Auction {
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
     }
 
-    function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
-        AuctionData storage auction = auctions[auctionId];
-        require(auction.highestBid != 0 || bidAmount >= auction.minimumBid, 'First bid should be greater than starting bid');
-        require(auction.highestBid == 0 || bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
-        receiveERC20(auction.biddingToken, msg.sender, bidAmount);
-        uint256 refund = auction.highestBid;
-        address previousWinner = auction.winner;
-        auction.winner = msg.sender;
-        auction.highestBid = bidAmount;
-        if (refund != 0) {
-            sendERC20(auction.biddingToken, previousWinner, refund);
-        }
-        auction.availableFunds = bidAmount;
-        auction.deadline += auction.deadlineExtension;
-        emit bidPlaced(auctionId, msg.sender, bidAmount);
+    function bid(uint256 auctionId, uint256 bidAmount)
+    external
+    exists(auctionId)
+    beforeDeadline(auctions[auctionId].deadline)
+{
+    AuctionData storage auction = auctions[auctionId];
+
+    // First bid must meet minimumBid
+    if (auction.highestBid == 0) {
+        require(
+            bidAmount >= auction.minimumBid,
+            "Bid below minimum"
+        );
+    } else {
+        // Enforce strict increment
+        require(
+            bidAmount >= auction.highestBid + auction.minBidDelta,
+            "Bid increment too low"
+        );
     }
+
+    require(auction.minBidDelta > 0, "Invalid minBidDelta");
+
+    receiveERC20(auction.biddingToken, msg.sender, bidAmount);
+
+    uint256 refund = auction.highestBid;
+    address previousWinner = auction.winner;
+
+    auction.winner = msg.sender;
+    auction.highestBid = bidAmount;
+    auction.availableFunds = bidAmount;
+
+    if (refund != 0) {
+        sendERC20(auction.biddingToken, previousWinner, refund);
+    }
+
+    auction.deadline += auction.deadlineExtension;
+
+    emit bidPlaced(auctionId, msg.sender, bidAmount);
+}
 
     function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
