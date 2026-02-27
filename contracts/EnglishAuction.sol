@@ -7,13 +7,15 @@ import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-/**
- * @title EnglishAuction
- * @notice Auction contract for NFT and token auctions, where the highest bidder wins the auction and rest of the bidders get their bid refunded.
- */
 contract EnglishAuction is Auction {
-    constructor (address _protocolParametersAddress) Auction(_protocolParametersAddress){}
+    using SafeERC20 for IERC20;
+
+    constructor(address _protocolParametersAddress)
+        Auction(_protocolParametersAddress)
+    {}
+
     mapping(uint256 => AuctionData) public auctions;
+
     struct AuctionData {
         uint256 id;
         string name;
@@ -34,6 +36,7 @@ contract EnglishAuction is Auction {
         bool isClaimed;
         uint256 protocolFee;
     }
+
     event AuctionCreated(
         uint256 indexed Id,
         string name,
@@ -51,6 +54,10 @@ contract EnglishAuction is Auction {
         uint256 protocolFee
     );
 
+    /* ============================================================
+                        CREATE AUCTION
+       ============================================================ */
+
     function createAuction(
         string memory name,
         string memory description,
@@ -63,10 +70,26 @@ contract EnglishAuction is Auction {
         uint256 minBidDelta,
         uint256 duration,
         uint256 deadlineExtension
-    ) external nonEmptyString(name) nonZeroAddress(auctionedToken) nonZeroAddress(biddingToken) {
+    )
+        external
+        nonEmptyString(name)
+        nonZeroAddress(auctionedToken)
+        nonZeroAddress(biddingToken)
+    {
         require(duration > 0, 'Duration must be greater than zero seconds');
-        receiveFunds(auctionType == AuctionType.NFT, auctionedToken, msg.sender, auctionedTokenIdOrAmount);
+        require(minimumBid > 0, 'minimumBid must be > 0');
+        require(minBidDelta > 0, 'minBidDelta must be > 0');
+
+        // Capture actual received (important fix)
+        uint256 actualReceived = receiveFunds(
+            auctionType == AuctionType.NFT,
+            auctionedToken,
+            msg.sender,
+            auctionedTokenIdOrAmount
+        );
+
         uint256 deadline = block.timestamp + duration;
+
         auctions[auctionCounter] = AuctionData({
             id: auctionCounter,
             name: name,
@@ -75,53 +98,156 @@ contract EnglishAuction is Auction {
             auctioneer: msg.sender,
             auctionType: auctionType,
             auctionedToken: auctionedToken,
-            auctionedTokenIdOrAmount: auctionedTokenIdOrAmount,
+            auctionedTokenIdOrAmount: actualReceived,
             biddingToken: biddingToken,
             minimumBid: minimumBid,
             availableFunds: 0,
             minBidDelta: minBidDelta,
             highestBid: 0,
-            winner: msg.sender,
+            winner: address(0),
             deadline: deadline,
             deadlineExtension: deadlineExtension,
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
+
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            actualReceived,
+            biddingToken,
+            minimumBid,
+            minBidDelta,
+            deadline,
+            deadlineExtension,
+            protocolParameters.fee()
+        );
     }
 
-    function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
+    /* ============================================================
+                            BID (FIXED)
+       ============================================================ */
+
+    function bid(uint256 auctionId, uint256 bidAmount)
+        external
+        exists(auctionId)
+        beforeDeadline(auctions[auctionId].deadline)
+    {
         AuctionData storage auction = auctions[auctionId];
-        require(auction.highestBid != 0 || bidAmount >= auction.minimumBid, 'First bid should be greater than starting bid');
-        require(auction.highestBid == 0 || bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
-        receiveERC20(auction.biddingToken, msg.sender, bidAmount);
-        uint256 refund = auction.highestBid;
-        address previousWinner = auction.winner;
-        auction.winner = msg.sender;
-        auction.highestBid = bidAmount;
-        if (refund != 0) {
-            sendERC20(auction.biddingToken, previousWinner, refund);
+
+        // Capture actual received FIRST (critical fix)
+        uint256 actualReceived = receiveERC20(
+            auction.biddingToken,
+            msg.sender,
+            bidAmount
+        );
+
+        // Validate using actualReceived (not bidAmount)
+        if (auction.highestBid == 0) {
+            require(
+                actualReceived >= auction.minimumBid,
+                "Auction: bid below minimum"
+            );
+        } else {
+            require(
+                actualReceived >= auction.highestBid + auction.minBidDelta,
+                "Auction: bid too low"
+            );
         }
-        auction.availableFunds = bidAmount;
+
+        uint256 previousHighest = auction.highestBid;
+        address previousWinner = auction.winner;
+
+        // Update state
+        auction.winner = msg.sender;
+        auction.highestBid = actualReceived;
+        auction.availableFunds = actualReceived;
+
+        // Refund previous highest bidder
+        if (previousHighest != 0) {
+            sendERC20(
+                auction.biddingToken,
+                previousWinner,
+                previousHighest
+            );
+        }
+
+        // Extend deadline
         auction.deadline += auction.deadlineExtension;
-        emit bidPlaced(auctionId, msg.sender, bidAmount);
+
+        emit bidPlaced(auctionId, msg.sender, actualReceived);
     }
 
-    function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) {
+    /* ============================================================
+                            WITHDRAW
+       ============================================================ */
+
+    function withdraw(uint256 auctionId)
+        external
+        exists(auctionId)
+        onlyAfterDeadline(auctions[auctionId].deadline)
+    {
         AuctionData storage auction = auctions[auctionId];
+
         uint256 withdrawAmount = auction.availableFunds;
+        require(withdrawAmount > 0, "Auction: nothing to withdraw");
+
         auction.availableFunds = 0;
+
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
-        sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendERC20(auction.biddingToken,feeRecipient,fees);
+
+        sendERC20(
+            auction.biddingToken,
+            auction.auctioneer,
+            withdrawAmount - fees
+        );
+
+        sendERC20(
+            auction.biddingToken,
+            feeRecipient,
+            fees
+        );
+
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+    /* ============================================================
+                                CLAIM
+       ============================================================ */
+
+    function claim(uint256 auctionId)
+        external
+        exists(auctionId)
+        onlyAfterDeadline(auctions[auctionId].deadline)
+        notClaimed(auctions[auctionId].isClaimed)
+    {
         AuctionData storage auction = auctions[auctionId];
+
+        require(
+            msg.sender == auction.winner,
+            "Auction: only winner can claim"
+        );
+
         auction.isClaimed = true;
-        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
-        emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
+
+        sendFunds(
+            auction.auctionType == AuctionType.NFT,
+            auction.auctionedToken,
+            auction.winner,
+            auction.auctionedTokenIdOrAmount
+        );
+
+        emit Claimed(
+            auctionId,
+            auction.winner,
+            auction.auctionedToken,
+            auction.auctionedTokenIdOrAmount
+        );
     }
 }

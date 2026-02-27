@@ -99,7 +99,20 @@ contract VickreyAuction is Auction, ReentrancyGuard {
             protocolFee: protocolParameters.fee(),
             accumulatedCommitFee: 0
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd, protocolParameters.fee());
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            auctionedTokenIdOrAmount,
+            biddingToken,
+            bidCommitEnd,
+            bidRevealEnd,
+            protocolParameters.fee()
+        );
     }
 
     function commitBid(uint256 auctionId, bytes32 commitment) external payable exists(auctionId) beforeDeadline(auctions[auctionId].bidCommitEnd) {
@@ -112,37 +125,88 @@ contract VickreyAuction is Auction, ReentrancyGuard {
     }
 
     function revealBid(
-        uint256 auctionId,
-        uint256 bidAmount,
-        bytes32 salt
-    ) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidCommitEnd) beforeDeadline(auctions[auctionId].bidRevealEnd) {
-        AuctionData storage auction = auctions[auctionId];
-        require(commitments[auctionId][msg.sender] != bytes32(0), "The sender hadn't commited during commiting phase");
-        bytes32 check = keccak256(abi.encodePacked(bidAmount, salt));
-        require(check == commitments[auctionId][msg.sender], 'Invalid reveal');
-        bids[auctionId][msg.sender] = bidAmount;
-        uint256 highestBid = bids[auctionId][auction.winner];
-        receiveERC20(auction.biddingToken, msg.sender, bidAmount);
-        if (highestBid < bidAmount) {
-            if (highestBid > 0 && auction.winner != msg.sender && auction.winner != auction.auctioneer) {
-                sendERC20(auction.biddingToken, auction.winner, highestBid); //Refund the previous highest bidder(not the auctioneer initially)
-            }
-            auction.availableFunds = highestBid;
-            auction.winningBid = highestBid; //Previous highest bid is now the winning bid which will be paid by the winner
-            auction.winner = msg.sender;
-        } else if (bidAmount > auction.winningBid) {
-            //Tracking the second highest bid,if someone bids more than the current winning bid but not the highest bid
-            auction.availableFunds = bidAmount;
-            auction.winningBid = bidAmount;
-            sendERC20(auction.biddingToken, msg.sender, bidAmount); //Refund the current winning bid to the new bidder
-        } else {
-            sendERC20(auction.biddingToken, msg.sender, bidAmount); //Not the highest bidder, refund the bid amount
+    uint256 auctionId,
+    uint256 bidAmount,
+    bytes32 salt
+)
+    external
+    nonReentrant
+    exists(auctionId)
+    onlyAfterDeadline(auctions[auctionId].bidCommitEnd)
+    beforeDeadline(auctions[auctionId].bidRevealEnd)
+{
+    AuctionData storage auction = auctions[auctionId];
+
+    require(
+        commitments[auctionId][msg.sender] != bytes32(0),
+        "The sender hadn't commited during commiting phase"
+    );
+
+    bytes32 check = keccak256(abi.encodePacked(bidAmount, salt));
+    require(check == commitments[auctionId][msg.sender], "Invalid reveal");
+
+    // 🔐 Capture actual tokens received (fee-on-transfer safe)
+    uint256 actualReceived = receiveERC20(
+        auction.biddingToken,
+        msg.sender,
+        bidAmount
+    );
+
+    // Store actual received amount
+    bids[auctionId][msg.sender] = actualReceived;
+
+    uint256 currentHighest = bids[auctionId][auction.winner];
+
+    if (currentHighest < actualReceived) {
+
+        // Refund previous highest (except auctioneer initial state)
+        if (
+            currentHighest > 0 &&
+            auction.winner != msg.sender &&
+            auction.winner != auction.auctioneer
+        ) {
+            sendERC20(
+                auction.biddingToken,
+                auction.winner,
+                currentHighest
+            );
         }
-        auction.accumulatedCommitFee -= auction.commitFee;
-        (bool success, ) = msg.sender.call{value: auction.commitFee}(''); //Refund commit fee
-        require(success, 'Refund failed');
-        emit BidRevealed(auctionId, msg.sender, bidAmount);
+
+        auction.availableFunds = currentHighest;
+        auction.winningBid = currentHighest;
+        auction.winner = msg.sender;
+
+    } else if (actualReceived > auction.winningBid) {
+
+        // Update second highest bid
+        auction.availableFunds = actualReceived;
+        auction.winningBid = actualReceived;
+
+        // Refund this bidder (not highest)
+        sendERC20(
+            auction.biddingToken,
+            msg.sender,
+            actualReceived
+        );
+
+    } else {
+
+        // Not highest → full refund
+        sendERC20(
+            auction.biddingToken,
+            msg.sender,
+            actualReceived
+        );
     }
+
+    // Update state BEFORE external call (reentrancy safety)
+    auction.accumulatedCommitFee -= auction.commitFee;
+
+    (bool success, ) = msg.sender.call{value: auction.commitFee}("");
+    require(success, "Refund failed");
+
+    emit BidRevealed(auctionId, msg.sender, actualReceived);
+}
 
     function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
