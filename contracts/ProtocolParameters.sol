@@ -9,6 +9,11 @@ contract ProtocolParameters {
     address public treasury;
     address public manager;
     uint256 public fee;
+    /// @notice Emitted when protocol fee is updated
+    event FeeUpdated(uint256 oldFee, uint256 newFee);
+
+    /// @notice Emitted when treasury address is updated
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
 
     modifier onlyManager(){
         require(msg.sender == manager, "Caller is not the manager");
@@ -32,10 +37,14 @@ contract ProtocolParameters {
     }
 
     function updateFee(uint256 newFee) external onlyManager lessThan5Percent(newFee) {
+        uint256 oldFee = fee;
         fee = newFee;
+        emit FeeUpdated(oldFee, newFee);
     }
 
     function updateTreasury(address newTreasury) external onlyManager nonZeroAddress(newTreasury) {
+        address oldTreasury = treasury;
         treasury = newTreasury;
+        emit TreasuryUpdated(oldTreasury, newTreasury);
     }
 }
