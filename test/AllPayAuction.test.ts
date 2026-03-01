@@ -451,5 +451,30 @@ describe('AllPayAuction', function () {
             await biddingToken.connect(bidder1).approve(await allPayAuction.getAddress(), bidAmount);
             await expect(allPayAuction.connect(bidder1).bid(0, bidAmount)).to.be.revertedWith('Deadline of auction reached');
         });
+
+        it('should not allow cancelling an already cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await allPayAuction.getAddress(), 1);
+            await allPayAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                );
+
+            await allPayAuction.connect(auctioneer).cancelAuction(0);
+
+            await expect(allPayAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Auctioned asset has already been claimed',
+            );
+        });
     });
 });

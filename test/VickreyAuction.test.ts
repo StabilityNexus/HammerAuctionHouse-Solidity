@@ -432,7 +432,9 @@ describe('VickreyAuction', function () {
             await vickreyAuction.connect(auctioneer).cancelAuction(0);
 
             // Try to cancel again - should revert because asset already claimed
-            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.reverted;
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Auctioned asset has already been claimed',
+            );
         });
 
         it('should not allow cancellation after commit phase ends if commitments exist', async function () {

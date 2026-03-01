@@ -332,7 +332,7 @@ describe('LinearReverseDutchAuction', function () {
             await linearReverseDutchAuction.connect(bidder1).bid(0);
 
             await expect(linearReverseDutchAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
-                'Cannot cancel auction with bids',
+                'Auction already claimed',
             );
         });
 
@@ -361,5 +361,54 @@ describe('LinearReverseDutchAuction', function () {
                 .withArgs(0, await auctioneer.getAddress());
         });
 
+        it('should not allow cancelling an already cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await linearReverseDutchAuction.getAddress(), 1);
+            await linearReverseDutchAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('10'),
+                    ethers.parseEther('1'),
+                    10,
+                );
+
+            await linearReverseDutchAuction.connect(auctioneer).cancelAuction(0);
+
+            await expect(linearReverseDutchAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Auction already claimed',
+            );
+        });
+
+        it('should not allow bidding on cancelled auction', async function () {
+            await mockNFT.connect(auctioneer).approve(await linearReverseDutchAuction.getAddress(), 1);
+            await linearReverseDutchAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('10'),
+                    ethers.parseEther('1'),
+                    10,
+                );
+
+            await linearReverseDutchAuction.connect(auctioneer).cancelAuction(0);
+
+            const bidAmount = ethers.parseEther('10');
+            await biddingToken.connect(bidder1).approve(await linearReverseDutchAuction.getAddress(), bidAmount);
+            await expect(linearReverseDutchAuction.connect(bidder1).bid(0)).to.be.revertedWith(
+                'Deadline of auction reached',
+            );
+        });
     });
 });

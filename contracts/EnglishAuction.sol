@@ -118,7 +118,7 @@ contract EnglishAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function cancelAuction(uint256 auctionId) external exists(auctionId) {
+    function cancelAuction(uint256 auctionId) external exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
         require(auction.highestBid == 0, "Cannot cancel auction with bids");

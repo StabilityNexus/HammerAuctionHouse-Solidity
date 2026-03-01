@@ -144,7 +144,7 @@ contract VickreyAuction is Auction, ReentrancyGuard {
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
-    function cancelAuction(uint256 auctionId) external exists(auctionId) {
+    function cancelAuction(uint256 auctionId) external exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
         require(auction.accumulatedCommitFee == 0, "Cannot cancel: commitments exist");
