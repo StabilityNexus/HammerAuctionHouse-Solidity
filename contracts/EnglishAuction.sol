@@ -12,7 +12,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
  * @notice Auction contract for NFT and token auctions, where the highest bidder wins the auction and rest of the bidders get their bid refunded.
  */
 contract EnglishAuction is Auction {
-    constructor (address _protocolParametersAddress) Auction(_protocolParametersAddress){}
+    constructor(address _protocolParametersAddress) Auction(_protocolParametersAddress) {}
     mapping(uint256 => AuctionData) public auctions;
     struct AuctionData {
         uint256 id;
@@ -87,7 +87,22 @@ contract EnglishAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            auctionedTokenIdOrAmount,
+            biddingToken,
+            minimumBid,
+            minBidDelta,
+            deadline,
+            deadlineExtension,
+            protocolParameters.fee()
+        );
     }
 
     function bid(uint256 auctionId, uint256 bidAmount) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
@@ -114,14 +129,22 @@ contract EnglishAuction is Auction {
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendERC20(auction.biddingToken,feeRecipient,fees);
+        sendERC20(auction.biddingToken, feeRecipient, fees);
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
     function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
+
+        //  Verify NFT is properly escrowed
+        if (auction.auctionType == AuctionType.NFT) {
+            require(IERC721(auction.auctionedToken).ownerOf(auction.auctionedTokenIdOrAmount) == address(this), 'NFT not escrowed');
+        }
+
         auction.isClaimed = true;
+
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }

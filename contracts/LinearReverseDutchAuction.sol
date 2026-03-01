@@ -87,7 +87,21 @@ contract LinearReverseDutchAuction is Auction {
             isClaimed: false,
             protocolFee: protocolParameters.fee()
         });
-        emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, startingPrice, minPrice, deadline, protocolParameters.fee());
+        emit AuctionCreated(
+            auctionCounter++,
+            name,
+            description,
+            imgUrl,
+            msg.sender,
+            auctionType,
+            auctionedToken,
+            auctionedTokenIdOrAmount,
+            biddingToken,
+            startingPrice,
+            minPrice,
+            deadline,
+            protocolParameters.fee()
+        );
     }
 
     function getCurrentPrice(uint256 auctionId) public view exists(auctionId) returns (uint256) {
@@ -121,9 +135,18 @@ contract LinearReverseDutchAuction is Auction {
 
     function claim(uint256 auctionId) public exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
-        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, "Invalid call");
+
+        require(block.timestamp > auction.deadline || auction.winner != auction.auctioneer, 'Invalid call');
+
+        // 🔐 Ensure NFT escrow
+        if (auction.auctionType == AuctionType.NFT) {
+            require(IERC721(auction.auctionedToken).ownerOf(auction.auctionedTokenIdOrAmount) == address(this), 'NFT not escrowed');
+        }
+
         auction.isClaimed = true;
+
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
+
         emit Claimed(auctionId, auction.winner, auction.auctionedToken, auction.auctionedTokenIdOrAmount);
     }
 }
