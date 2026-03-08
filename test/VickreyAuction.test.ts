@@ -220,7 +220,7 @@ describe('VickreyAuction', function () {
     });
 
     describe('Auction Cancellation', function () {
-        it('should allow auctioneer to cancel auction before commit phase starts', async function () {
+        it('should allow auctioneer to cancel auction before any commitments are made', async function () {
             await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
             await vickreyAuction
                 .connect(auctioneer)
@@ -249,7 +249,7 @@ describe('VickreyAuction', function () {
             expect(auction.isClaimed).to.be.true;
         });
 
-        it('should allow auctioneer to cancel token auction before commit phase starts', async function () {
+        it('should allow auctioneer to cancel token auction before any commitments are made', async function () {
             const amount = ethers.parseEther('10');
             await mockToken.connect(auctioneer).approve(await vickreyAuction.getAddress(), amount);
 
@@ -468,6 +468,62 @@ describe('VickreyAuction', function () {
             // Auctioneer should not be able to cancel after commitments exist, even after commit phase ends
             await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
                 'Cannot cancel: commitments exist',
+            );
+        });
+
+        it('should not allow cancellation of zero-fee auction after commitments', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    0,
+                );
+
+            const bid = ethers.parseEther('5');
+            const salt = ethers.encodeBytes32String('secret123');
+            const commitment = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [bid, salt]);
+            await vickreyAuction.connect(bidder1).commitBid(0, commitment, { value: 0 });
+
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Cannot cancel: commitments exist',
+            );
+        });
+
+        it('should not allow cancellation after claim', async function () {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Test Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    1000,
+                    90000,
+                    ethers.parseEther('0.001'),
+                );
+
+            await ethers.provider.send('evm_increaseTime', [91001]);
+            await ethers.provider.send('evm_mine', []);
+
+            await vickreyAuction.connect(auctioneer).claim(0);
+
+            await expect(vickreyAuction.connect(auctioneer).cancelAuction(0)).to.be.revertedWith(
+                'Auctioned asset has already been claimed',
             );
         });
     });
