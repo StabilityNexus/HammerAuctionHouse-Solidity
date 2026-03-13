@@ -41,7 +41,7 @@ contract VickreyAuction is Auction {
         uint256 commitFee;
         uint256 protocolFee;
         uint256 accumulatedCommitFee;
-        uint256 commitCount;
+        uint256 totalCommits;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -98,7 +98,7 @@ contract VickreyAuction is Auction {
             commitFee: commitFee,
             protocolFee: protocolParameters.fee(),
             accumulatedCommitFee: 0,
-            commitCount: 0
+            totalCommits: 0
         });
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd, protocolParameters.fee());
     }
@@ -110,7 +110,7 @@ contract VickreyAuction is Auction {
         require(auction.auctioneer != msg.sender, 'Auctioneer cannot commit to bid');
         commitments[auctionId][msg.sender] = commitment;
         auction.accumulatedCommitFee += msg.value;
-        auction.commitCount += 1;
+        auction.totalCommits += 1;
     }
 
     function revealBid(
@@ -141,7 +141,6 @@ contract VickreyAuction is Auction {
             sendERC20(auction.biddingToken, msg.sender, bidAmount); //Not the highest bidder, refund the bid amount
         }
         auction.accumulatedCommitFee -= auction.commitFee;
-        auction.commitCount -= 1;
         (bool success, ) = msg.sender.call{value: auction.commitFee}(''); //Refund commit fee
         require(success, 'Refund failed');
         emit BidRevealed(auctionId, msg.sender, bidAmount);
@@ -150,7 +149,7 @@ contract VickreyAuction is Auction {
     function cancelAuction(uint256 auctionId) external exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
-        require(auction.commitCount == 0, "Cannot cancel: commitments exist");
+        require(auction.totalCommits == 0, "Cannot cancel: commitments exist");
         auction.isClaimed = true;
         auction.bidCommitEnd = block.timestamp; // Set commit end to now, preventing future commits via beforeDeadline modifier
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
