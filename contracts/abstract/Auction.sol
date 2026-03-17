@@ -6,13 +6,14 @@ import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
 
 /**
  * @title Auction
  * @notice Abstract contract for auction types
  * @dev This contract defines the basic structure and events for different auction types.
  */
-abstract contract Auction is IERC721Receiver {
+abstract contract Auction is IERC721Receiver, ReentrancyGuard {
     uint256 public auctionCounter = 0;
     ProtocolParameters protocolParameters;
 
@@ -24,6 +25,7 @@ abstract contract Auction is IERC721Receiver {
     event Withdrawn(uint256 indexed auctionId, uint256 amountWithdrawn);
     event Claimed(uint256 indexed auctionId, address withdrawer, address auctionedTokenAddress, uint256 auctionedTokenIdOrAmount);
     event bidPlaced(uint256 indexed auctionId, address bidder, uint256 bidAmount);
+    event AuctionCancelled(uint256 indexed auctionId, address indexed auctioneer);
 
     modifier exists(uint256 auctionId) {
         require(auctionId < auctionCounter, 'Invalid auctionId');

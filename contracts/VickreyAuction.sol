@@ -41,6 +41,7 @@ contract VickreyAuction is Auction {
         uint256 commitFee;
         uint256 protocolFee;
         uint256 accumulatedCommitFee;
+        uint256 totalCommits;
     }
     event AuctionCreated(
         uint256 indexed Id,
@@ -96,7 +97,8 @@ contract VickreyAuction is Auction {
             isClaimed: false,
             commitFee: commitFee,
             protocolFee: protocolParameters.fee(),
-            accumulatedCommitFee: 0
+            accumulatedCommitFee: 0,
+            totalCommits: 0
         });
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, bidCommitEnd, bidRevealEnd, protocolParameters.fee());
     }
@@ -108,13 +110,14 @@ contract VickreyAuction is Auction {
         require(auction.auctioneer != msg.sender, 'Auctioneer cannot commit to bid');
         commitments[auctionId][msg.sender] = commitment;
         auction.accumulatedCommitFee += msg.value;
+        auction.totalCommits += 1;
     }
 
     function revealBid(
         uint256 auctionId,
         uint256 bidAmount,
         bytes32 salt
-    ) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidCommitEnd) beforeDeadline(auctions[auctionId].bidRevealEnd) {
+    ) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidCommitEnd) beforeDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
         require(commitments[auctionId][msg.sender] != bytes32(0), "The sender hadn't commited during commiting phase");
         bytes32 check = keccak256(abi.encodePacked(bidAmount, salt));
@@ -123,7 +126,7 @@ contract VickreyAuction is Auction {
         uint256 highestBid = bids[auctionId][auction.winner];
         receiveERC20(auction.biddingToken, msg.sender, bidAmount);
         if (highestBid < bidAmount) {
-            if (highestBid > 0 && auction.winner != msg.sender) {
+            if (highestBid > 0 && auction.winner != msg.sender && auction.winner != auction.auctioneer) {
                 sendERC20(auction.biddingToken, auction.winner, highestBid); //Refund the previous highest bidder(not the auctioneer initially)
             }
             auction.availableFunds = highestBid;
@@ -137,24 +140,35 @@ contract VickreyAuction is Auction {
         } else {
             sendERC20(auction.biddingToken, msg.sender, bidAmount); //Not the highest bidder, refund the bid amount
         }
+        auction.accumulatedCommitFee -= auction.commitFee;
         (bool success, ) = msg.sender.call{value: auction.commitFee}(''); //Refund commit fee
         require(success, 'Refund failed');
-        auction.accumulatedCommitFee -= auction.commitFee;
         emit BidRevealed(auctionId, msg.sender, bidAmount);
     }
 
-    function withdraw(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
+    function cancelAuction(uint256 auctionId) external exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
+        AuctionData storage auction = auctions[auctionId];
+        require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
+        require(auction.totalCommits == 0, "Cannot cancel: commitments exist");
+        auction.isClaimed = true;
+        auction.bidCommitEnd = block.timestamp; // Set commit end to now, preventing future commits via beforeDeadline modifier
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
+        emit AuctionCancelled(auctionId, auction.auctioneer);
+    }
+
+    function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
+        uint256 commitFeeToTransfer = auction.accumulatedCommitFee;
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendERC20(auction.biddingToken, feeRecipient, fees);
         if (auction.accumulatedCommitFee != 0) {
-            (bool success, ) = auction.auctioneer.call{value: auction.accumulatedCommitFee}('');
-            require(success, 'Commit fee withdrawal failed');
             auction.accumulatedCommitFee = 0;
+            (bool success, ) = auction.auctioneer.call{value: commitFeeToTransfer}('');
+            require(success, 'Commit fee withdrawal failed');
         }
         emit Withdrawn(auctionId, withdrawAmount);
     }

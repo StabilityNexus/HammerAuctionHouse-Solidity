@@ -91,7 +91,7 @@ contract AllPayAuction is Auction {
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
     }
 
-    function bid(uint256 auctionId, uint256 bidIncrement) external exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
+    function bid(uint256 auctionId, uint256 bidIncrement) external nonReentrant exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
         require(auction.highestBid != 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.minimumBid, 'First bid should be greater than starting bid');
         require(auction.highestBid == 0 || bids[auctionId][msg.sender] + bidIncrement >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
@@ -104,7 +104,7 @@ contract AllPayAuction is Auction {
         emit bidPlaced(auctionId, msg.sender, bids[auctionId][msg.sender]);
     }
 
-    function withdraw(uint256 auctionId) external exists(auctionId) {
+    function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
@@ -115,7 +115,17 @@ contract AllPayAuction is Auction {
         emit Withdrawn(auctionId, withdrawAmount);
     }
 
-    function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
+    function cancelAuction(uint256 auctionId) external nonReentrant exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
+        AuctionData storage auction = auctions[auctionId];
+        require(msg.sender == auction.auctioneer, "Only auctioneer can cancel");
+        require(auction.highestBid == 0, "Cannot cancel auction with bids");
+        auction.isClaimed = true;
+        auction.deadline = block.timestamp; // Set deadline to now, preventing future bids via beforeDeadline modifier
+        sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.auctioneer, auction.auctionedTokenIdOrAmount);
+        emit AuctionCancelled(auctionId, auction.auctioneer);
+    }
+
+    function claim(uint256 auctionId) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
         AuctionData storage auction = auctions[auctionId];
         auction.isClaimed = true;
         sendFunds(auction.auctionType == AuctionType.NFT, auction.auctionedToken, auction.winner, auction.auctionedTokenIdOrAmount);
