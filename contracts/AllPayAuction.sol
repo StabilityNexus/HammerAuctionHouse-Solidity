@@ -33,6 +33,7 @@ contract AllPayAuction is Auction {
         uint256 deadline;
         uint256 deadlineExtension;
         bool isClaimed;
+        bool isWithdrawn;
         uint256 protocolFee;
     }
     event AuctionCreated(
@@ -86,6 +87,7 @@ contract AllPayAuction is Auction {
             deadline: deadline,
             deadlineExtension: deadlineExtension,
             isClaimed: false,
+            isWithdrawn: false,
             protocolFee: protocolParameters.fee()
         });
         emit AuctionCreated(auctionCounter++, name, description, imgUrl, msg.sender, auctionType, auctionedToken, auctionedTokenIdOrAmount, biddingToken, minimumBid, minBidDelta, deadline, deadlineExtension, protocolParameters.fee());
@@ -104,9 +106,12 @@ contract AllPayAuction is Auction {
         emit bidPlaced(auctionId, msg.sender, bids[auctionId][msg.sender]);
     }
 
-    function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) {
+    function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
+        require(!auction.isWithdrawn, 'Funds have already been withdrawn');
         uint256 withdrawAmount = auction.availableFunds;
+        require(withdrawAmount > 0, 'No funds to withdraw');
+        auction.isWithdrawn = true;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();

@@ -38,6 +38,7 @@ contract VickreyAuction is Auction {
         uint256 bidCommitEnd;
         uint256 bidRevealEnd;
         bool isClaimed;
+        bool isWithdrawn; // Tracks whether the auctioneer has already withdrawn bid proceeds
         uint256 commitFee;
         uint256 protocolFee;
         uint256 accumulatedCommitFee;
@@ -95,6 +96,7 @@ contract VickreyAuction is Auction {
             bidCommitEnd: bidCommitEnd,
             bidRevealEnd: bidRevealEnd,
             isClaimed: false,
+            isWithdrawn: false,
             commitFee: commitFee,
             protocolFee: protocolParameters.fee(),
             accumulatedCommitFee: 0,
@@ -158,15 +160,19 @@ contract VickreyAuction is Auction {
 
     function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
+        require(!auction.isWithdrawn, 'Funds have already been withdrawn');
+        auction.isWithdrawn = true;
         uint256 withdrawAmount = auction.availableFunds;
         auction.availableFunds = 0;
+        uint256 commitFeeToTransfer = auction.accumulatedCommitFee;
+        auction.accumulatedCommitFee = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
-        uint256 commitFeeToTransfer = auction.accumulatedCommitFee;
-        sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
-        sendERC20(auction.biddingToken, feeRecipient, fees);
-        if (auction.accumulatedCommitFee != 0) {
-            auction.accumulatedCommitFee = 0;
+        if (withdrawAmount > 0) {
+            sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
+            sendERC20(auction.biddingToken, feeRecipient, fees);
+        }
+        if (commitFeeToTransfer != 0) {
             (bool success, ) = auction.auctioneer.call{value: commitFeeToTransfer}('');
             require(success, 'Commit fee withdrawal failed');
         }
