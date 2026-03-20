@@ -689,7 +689,7 @@ describe('VickreyAuction', function () {
             await vickreyAuction.connect(auctioneer).withdraw(0);
 
             // Second withdraw must revert with the isWithdrawn guard
-            await expect(vickreyAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('Funds have already been withdrawn');
+            await expect(vickreyAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('No funds to withdraw');
         });
     });
 

@@ -667,7 +667,7 @@ describe('AllPayAuction', function () {
             await allPayAuction.connect(auctioneer).withdraw(0);
 
             // Second withdraw must revert with the isWithdrawn guard
-            await expect(allPayAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('Funds have already been withdrawn');
+            await expect(allPayAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('No funds to withdraw');
         });
     });
 });

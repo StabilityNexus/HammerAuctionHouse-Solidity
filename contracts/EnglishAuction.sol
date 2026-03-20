@@ -26,7 +26,6 @@ contract EnglishAuction is Auction {
         address biddingToken;
         uint256 minimumBid;
         uint256 availableFunds;
-        bool isWithdrawn;
         uint256 minBidDelta;
         uint256 highestBid;
         address winner;
@@ -80,7 +79,6 @@ contract EnglishAuction is Auction {
             biddingToken: biddingToken,
             minimumBid: minimumBid,
             availableFunds: 0,
-            isWithdrawn: false,
             minBidDelta: minBidDelta,
             highestBid: 0,
             winner: msg.sender,
@@ -111,10 +109,8 @@ contract EnglishAuction is Auction {
 
     function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
-        require(!auction.isWithdrawn, 'Funds have already been withdrawn');
         uint256 withdrawAmount = auction.availableFunds;
         require(withdrawAmount > 0, 'No funds to withdraw');
-        auction.isWithdrawn = true;
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
