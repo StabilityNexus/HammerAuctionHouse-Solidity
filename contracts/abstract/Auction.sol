@@ -87,13 +87,14 @@ abstract contract Auction is IERC721Receiver {
 
     /**
      * @dev Receives funds and returns actual received amount.
-     *      For ERC20 tokens, rejects fee-on-transfer tokens.
+     *      Supports strict mode to reject fee-on-transfer tokens.
      */
     function receiveFunds(
         bool isNFT,
         address token,
         address from,
-        uint256 tokenIdOrAmount
+        uint256 tokenIdOrAmount,
+        bool strict
     ) internal returns (uint256 actualReceived) {
         if (isNFT) {
             receiveNFT(token, from, tokenIdOrAmount);
@@ -101,12 +102,29 @@ abstract contract Auction is IERC721Receiver {
         } else {
             actualReceived = receiveERC20(token, from, tokenIdOrAmount);
 
-            // Strict mode: reject deflationary tokens
-            require(
-                actualReceived == tokenIdOrAmount,
-                "Auction: fee-on-transfer tokens not supported"
-            );
+            if (strict) {
+                require(
+                    actualReceived == tokenIdOrAmount,
+                    "Auction: fee-on-transfer tokens not supported"
+                );
+            }
         }
+    }
+
+    
+    function receiveFunds(
+        bool isNFT,
+        address token,
+        address from,
+        uint256 tokenIdOrAmount
+    ) internal returns (uint256 actualReceived) {
+        return receiveFunds(
+            isNFT,
+            token,
+            from,
+            tokenIdOrAmount,
+            true // default strict mode
+        );
     }
 
     function sendNFT(address token, address to, uint256 tokenId) internal {
