@@ -50,12 +50,6 @@ contract EnglishAuction is Auction {
         uint256 deadlineExtension,
         uint256 protocolFee
     );
-    event FeePaid(
-        uint256 indexed auctionId,
-        address indexed payer,
-        address indexed treasury,
-        uint256 feeAmount
-    );
 
     function createAuction(
         string memory name,
@@ -121,8 +115,7 @@ contract EnglishAuction is Auction {
         address feeRecipient = protocolParameters.treasury();
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendERC20(auction.biddingToken,feeRecipient,fees);
-        emit FeePaid(auctionId, auction.auctioneer, feeRecipient, fees);
-        emit Withdrawn(auctionId, withdrawAmount);
+        emit Withdrawn(auctionId, auction.auctioneer, feeRecipient, fees, withdrawAmount);
     }
 
     function claim(uint256 auctionId) external exists(auctionId) onlyAfterDeadline(auctions[auctionId].deadline) notClaimed(auctions[auctionId].isClaimed) {
