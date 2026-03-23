@@ -187,11 +187,13 @@ describe('EnglishAuction', function () {
 
             const bidAmount = ethers.parseEther('1.1');
             await biddingToken.connect(bidder1).approve(englishAuction.getAddress(), bidAmount);
-            await englishAuction.connect(bidder1).bid(0, bidAmount);
+            const bidTx = await englishAuction.connect(bidder1).bid(0, bidAmount);
+            const bidReceipt = await bidTx.wait();
+            const bidBlock = await ethers.provider.getBlock(bidReceipt!.blockNumber);
 
             const afterBid = (await englishAuction.auctions(0)).deadline;
             expect(afterBid).to.be.gt(beforeBid);
-            expect(afterBid - beforeBid).to.equal(10); // 10 seconds extension
+            expect(afterBid).to.equal(BigInt(bidBlock!.timestamp) + 10n);
         });
 
         it('should refund previous highest bidder on new highest bid', async function () {
