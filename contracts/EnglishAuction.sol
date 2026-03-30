@@ -103,7 +103,10 @@ contract EnglishAuction is Auction {
             sendERC20(auction.biddingToken, previousWinner, refund);
         }
         auction.availableFunds = bidAmount;
-        auction.deadline += auction.deadlineExtension;
+        uint256 currentTime = block.timestamp;
+        if (auction.deadline - currentTime <= auction.deadlineExtension) {
+            auction.deadline = currentTime + auction.deadlineExtension;
+        }
         emit bidPlaced(auctionId, msg.sender, bidAmount);
     }
 
