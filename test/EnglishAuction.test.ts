@@ -201,6 +201,38 @@ describe('EnglishAuction', function () {
             expect(auction.highestBid).to.equal(bidAmount);
         });
 
+        it('should revert zero bid when minimumBid is greater than zero', async function () {
+            const auction = await englishAuction.auctions(0);
+            expect(auction.minimumBid).to.be.gt(0);
+
+            await expect(englishAuction.connect(bidder1).bid(0, 0)).to.be.revertedWith('Bid amount must be greater than zero');
+        });
+
+        it('should revert zero bid when minimumBid is zero', async function () {
+            const auctionedAmount = ethers.parseEther('10');
+            await mockToken.connect(auctioneer).approve(await englishAuction.getAddress(), auctionedAmount);
+            await englishAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Zero Min Bid Auction',
+                    'Test Description',
+                    'https://example.com/test.jpg',
+                    1,
+                    await mockToken.getAddress(),
+                    auctionedAmount,
+                    await biddingToken.getAddress(),
+                    0,
+                    ethers.parseEther('0.1'),
+                    5,
+                    10,
+                );
+
+            const auction = await englishAuction.auctions(1);
+            expect(auction.minimumBid).to.equal(0);
+
+            await expect(englishAuction.connect(bidder1).bid(1, 0)).to.be.revertedWith('Bid amount must be greater than zero');
+        });
+
         it('should extend deadline on bid', async function () {
             const beforeBid = (await englishAuction.auctions(0)).deadline;
 

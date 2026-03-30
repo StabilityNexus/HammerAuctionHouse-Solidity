@@ -92,6 +92,7 @@ contract EnglishAuction is Auction {
 
     function bid(uint256 auctionId, uint256 bidAmount) external nonReentrant exists(auctionId) beforeDeadline(auctions[auctionId].deadline) {
         AuctionData storage auction = auctions[auctionId];
+        require(bidAmount > 0, "Bid amount must be greater than zero");
         require(auction.highestBid != 0 || bidAmount >= auction.minimumBid, 'First bid should be greater than starting bid');
         require(auction.highestBid == 0 || bidAmount >= auction.highestBid + auction.minBidDelta, 'Bid amount should exceed current bid by atleast minBidDelta');
         receiveERC20(auction.biddingToken, msg.sender, bidAmount);
