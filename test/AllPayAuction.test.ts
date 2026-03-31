@@ -291,6 +291,10 @@ describe('AllPayAuction', function () {
             await biddingToken.connect(bidder1).approve(allPayAuction.getAddress(), bidAmount);
             await allPayAuction.connect(bidder1).bid(0, bidAmount);
 
+            // Fast forward past deadline (5s + 10s extension + buffer)
+            await ethers.provider.send('evm_increaseTime', [20]);
+            await ethers.provider.send('evm_mine', []);
+
             const balanceBefore = await biddingToken.balanceOf(await auctioneer.getAddress());
             await allPayAuction.connect(auctioneer).withdraw(0);
             const balanceAfter = await biddingToken.balanceOf(await auctioneer.getAddress());
@@ -626,7 +630,12 @@ describe('AllPayAuction', function () {
 
             const auctioneerBalanceBefore = await maliciousToken.balanceOf(await auctioneer.getAddress());
 
+            // Fast forward past deadline before attempting withdraw
+            await ethers.provider.send('evm_increaseTime', [20]);
+            await ethers.provider.send('evm_mine', []);
+
             // Withdraw - malicious token tries to re-enter, but ReentrancyGuard blocks it
+            // The main transaction doesn't revert because MaliciousERC20 uses a low-level call
             await allPayAuction.connect(auctioneer).withdraw(0);
 
             const auctioneerBalanceAfter = await maliciousToken.balanceOf(await auctioneer.getAddress());
@@ -635,6 +644,30 @@ describe('AllPayAuction', function () {
             // Verify available funds were reset (attack failed)
             const auction = await allPayAuction.auctions(0);
             expect(auction.availableFunds).to.equal(0);
+        });
+    });
+
+    describe('Withdraw Security', function () {
+        async function createAndBid(bidAmount: bigint) {
+            await mockNFT.connect(auctioneer).approve(await allPayAuction.getAddress(), 1);
+            await allPayAuction
+                .connect(auctioneer)
+                .createAuction('Sec Auction', 'D', 'https://x.com/img.jpg', 0, await mockNFT.getAddress(), 1, await biddingToken.getAddress(), ethers.parseEther('1'), ethers.parseEther('0.1'), 5, 10);
+            await biddingToken.connect(bidder1).approve(await allPayAuction.getAddress(), bidAmount);
+            await allPayAuction.connect(bidder1).bid(0, bidAmount);
+            await ethers.provider.send('evm_increaseTime', [20]);
+            await ethers.provider.send('evm_mine', []);
+        }
+
+        it('should not allow multiple withdrawals by auctioneer', async function () {
+            const bidAmount = ethers.parseEther('1.5');
+            await createAndBid(bidAmount);
+
+            // First withdraw succeeds
+            await allPayAuction.connect(auctioneer).withdraw(0);
+
+            // Second withdraw must revert with the isWithdrawn guard
+            await expect(allPayAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('No funds to withdraw');
         });
     });
 });

@@ -640,4 +640,57 @@ describe('VickreyAuction', function () {
             expect(after.accumulatedCommitFee).to.equal(0);
         });
     });
+
+
+    describe('Withdraw Security', function () {
+        const BID_COMMIT_DURATION = 1000;
+        const BID_REVEAL_DURATION = 90000;
+        const COMMIT_FEE = ethers.parseEther('0.001');
+        const BID_HIGH = ethers.parseEther('20');
+        const BID_LOW = ethers.parseEther('10');
+
+        async function setupFullAuction() {
+            await mockNFT.connect(auctioneer).approve(await vickreyAuction.getAddress(), 1);
+            await vickreyAuction
+                .connect(auctioneer)
+                .createAuction(
+                    'Sec Auction',
+                    'D',
+                    'https://x.com/img.jpg',
+                    0,
+                    await mockNFT.getAddress(),
+                    1,
+                    await biddingToken.getAddress(),
+                    ethers.parseEther('1'),
+                    BID_COMMIT_DURATION,
+                    BID_REVEAL_DURATION,
+                    COMMIT_FEE,
+                );
+            const salt1 = ethers.id('salt-sec-1');
+            const salt2 = ethers.id('salt-sec-2');
+            const c1 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [BID_HIGH, salt1]);
+            const c2 = ethers.solidityPackedKeccak256(['uint256', 'bytes32'], [BID_LOW, salt2]);
+            await vickreyAuction.connect(bidder1).commitBid(0, c1, { value: COMMIT_FEE });
+            await vickreyAuction.connect(bidder2).commitBid(0, c2, { value: COMMIT_FEE });
+            await ethers.provider.send('evm_increaseTime', [BID_COMMIT_DURATION + 1]);
+            await ethers.provider.send('evm_mine', []);
+            await biddingToken.connect(bidder1).approve(await vickreyAuction.getAddress(), BID_HIGH);
+            await biddingToken.connect(bidder2).approve(await vickreyAuction.getAddress(), BID_LOW);
+            await vickreyAuction.connect(bidder1).revealBid(0, BID_HIGH, salt1);
+            await vickreyAuction.connect(bidder2).revealBid(0, BID_LOW, salt2);
+            await ethers.provider.send('evm_increaseTime', [BID_REVEAL_DURATION + 1]);
+            await ethers.provider.send('evm_mine', []);
+        }
+
+        it('should not allow multiple withdrawals by auctioneer', async function () {
+            await setupFullAuction();
+
+            // First withdraw succeeds
+            await vickreyAuction.connect(auctioneer).withdraw(0);
+
+            // Second withdraw must revert with the isWithdrawn guard
+            await expect(vickreyAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('No funds to withdraw');
+        });
+    });
+
 });

@@ -159,10 +159,11 @@ contract VickreyAuction is Auction {
     function withdraw(uint256 auctionId) external nonReentrant exists(auctionId) onlyAfterDeadline(auctions[auctionId].bidRevealEnd) {
         AuctionData storage auction = auctions[auctionId];
         uint256 withdrawAmount = auction.availableFunds;
+        uint256 commitFeeToTransfer = auction.accumulatedCommitFee;
+        require(withdrawAmount > 0 || commitFeeToTransfer != 0, 'No funds to withdraw');
         auction.availableFunds = 0;
         uint256 fees = (auction.protocolFee * withdrawAmount) / 10000;
         address feeRecipient = protocolParameters.treasury();
-        uint256 commitFeeToTransfer = auction.accumulatedCommitFee;
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendERC20(auction.biddingToken, feeRecipient, fees);
         if (auction.accumulatedCommitFee != 0) {

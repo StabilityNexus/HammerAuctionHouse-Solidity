@@ -683,4 +683,28 @@ describe('EnglishAuction', function () {
             expect(auction.availableFunds).to.equal(0);
         });
     });
+
+    describe('Withdraw Security', function () {
+        async function createAndBid(bidAmount: bigint) {
+            await mockNFT.connect(auctioneer).approve(await englishAuction.getAddress(), 1);
+            await englishAuction
+                .connect(auctioneer)
+                .createAuction('Sec Auction', 'D', 'https://x.com/img.jpg', 0, await mockNFT.getAddress(), 1, await biddingToken.getAddress(), ethers.parseEther('1'), ethers.parseEther('0.1'), 5, 10);
+            await biddingToken.connect(bidder1).approve(await englishAuction.getAddress(), bidAmount);
+            await englishAuction.connect(bidder1).bid(0, bidAmount);
+            await ethers.provider.send('evm_increaseTime', [20]);
+            await ethers.provider.send('evm_mine', []);
+        }
+
+        it('should not allow multiple withdrawals by auctioneer', async function () {
+            const bidAmount = ethers.parseEther('1.5');
+            await createAndBid(bidAmount);
+
+            // First withdraw succeeds
+            await englishAuction.connect(auctioneer).withdraw(0);
+
+            // Second withdraw must revert with the isWithdrawn guard
+            await expect(englishAuction.connect(auctioneer).withdraw(0)).to.be.revertedWith('No funds to withdraw');
+        });
+    });
 });
