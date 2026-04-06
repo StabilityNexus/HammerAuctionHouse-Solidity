@@ -118,7 +118,7 @@ contract EnglishAuction is Auction {
         address feeRecipient = protocolParameters.treasury();
         sendERC20(auction.biddingToken, auction.auctioneer, withdrawAmount - fees);
         sendERC20(auction.biddingToken,feeRecipient,fees);
-        emit Withdrawn(auctionId, withdrawAmount);
+        emit Withdrawn(auctionId, auction.auctioneer, feeRecipient, fees, withdrawAmount);
     }
 
     function cancelAuction(uint256 auctionId) external nonReentrant exists(auctionId) notClaimed(auctions[auctionId].isClaimed) {
