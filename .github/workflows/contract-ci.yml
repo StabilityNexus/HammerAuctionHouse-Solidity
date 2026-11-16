@@ -1,0 +1,66 @@
+name: Contract CI
+
+on:
+    pull_request:
+    push:
+        branches:
+            - main
+
+permissions:
+    contents: read
+
+concurrency:
+    group: contract-ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    contracts:
+        name: Compile, test, and verify
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+              with:
+                  persist-credentials: false
+
+            - name: Set up pnpm
+              uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+              with:
+                  run_install: false
+
+            - name: Set up Node.js
+              uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+                  cache-dependency-path: pnpm-lock.yaml
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Compile contracts
+              run: pnpm compile
+
+            - name: Run tests and collect gas measurements
+              env:
+                  CI: 'true'
+                  REPORT_GAS: 'true'
+              run: |
+                  mkdir -p reports
+                  pnpm test
+
+            - name: Verify contract integrity baseline
+              run: pnpm integrity:check
+
+            - name: Upload gas reports
+              if: always()
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: contract-gas-${{ github.run_id }}
+                  path: |
+                      reports/gas-report.txt
+                      gasReporterOutput.json
+                  if-no-files-found: ignore
+                  retention-days: 14
