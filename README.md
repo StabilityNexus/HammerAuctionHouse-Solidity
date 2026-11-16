@@ -54,3 +54,31 @@
 
 This repository implements the smart contracts for the [Hammer Auction House](https://hah.stability.nexus/) platform. For the complete web interface and additional documentation, kindly refer to [HammerAuctionHouse-WebUI](https://github.com/Stability-Nexus/HammerAuctionHouse-WebUI).
 
+## Development
+
+```bash
+pnpm install --frozen-lockfile
+pnpm compile
+pnpm test
+```
+
+## Contract CI
+
+Pull requests and pushes to `main` compile the contracts, run the complete test suite, collect gas measurements, and validate the committed contract baseline. The baseline protects:
+
+- compiler and optimizer settings;
+- canonical ABIs and storage layouts;
+- runtime bytecode, excluding compiler metadata;
+- deployed bytecode size with EIP-170 headroom; and
+- maximum observed gas for covered production methods and deployments.
+
+For an intentional contract change, review the ABI, storage, bytecode, size, and gas differences before updating the baseline:
+
+```bash
+mkdir -p reports
+CI=true REPORT_GAS=true pnpm test
+pnpm integrity:update
+pnpm integrity:check
+```
+
+Baseline updates must be committed with the contract change that requires them. Do not update the baseline merely to make CI pass.

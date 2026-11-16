@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "deployedBytecodeLimit": 23616,
+  "compiler": {
+    "solc": "0.8.28+commit.7893614a",
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "viaIR": true,
+    "evmVersion": "cancun"
+  },
+  "contracts": {
+    "contracts/AllPayAuction.sol:AllPayAuction": {
+      "abiHash": "854d820c79ec6679dbc4c9a3d41fbc4c98fcb43fc747e9520fc617d636a2f3eb",
+      "runtimeCodeHash": "5c05355dcb5be82962f1f1052d1292bbc239b9293eb06d0ebc793f4bf245a2b6",
+      "storageLayoutHash": "a5c3d9716fc36217fe9ef2250e97306845a67c04fb01b011575eafa4e25c9e4e",
+      "deployedBytecodeBytes": 6202
+    },
+    "contracts/EnglishAuction.sol:EnglishAuction": {
+      "abiHash": "68ea8fb7f9bbc5ada52b7540f19f01da7a5a4f9e021eb01ee08cf6a1ff603d08",
+      "runtimeCodeHash": "e84ab48300db217de1635130695b891e928d79d245e923e6270555fad9d669f7",
+      "storageLayoutHash": "0173ce888d139fd38c41d95e56228e3e9b128b2c2ffae5fa3fdd97bd0259bdf6",
+      "deployedBytecodeBytes": 6114
+    },
+    "contracts/ExponentialReverseDutchAuction.sol:ExponentialReverseDutchAuction": {
+      "abiHash": "a40b7f6c9fd4d6fbe17b557a644e0c2b6930ee11303ea2cc8fa34ecb529b4636",
+      "runtimeCodeHash": "169e8b0b3bce8f582935e7b8622fb4393f1595c17f5c06acc4064f61012a94f5",
+      "storageLayoutHash": "c03932bda197d84a7295b07d0ff820a5562a77b93254cc8fb54609ba6c99ce2f",
+      "deployedBytecodeBytes": 6127
+    },
+    "contracts/LinearReverseDutchAuction.sol:LinearReverseDutchAuction": {
+      "abiHash": "52a6229186319b4322c5f5389ab7919450bc6b9027baa24dfc7041650caf1700",
+      "runtimeCodeHash": "8df065dba27033e8bbdd592d3a4c66414ed8dfcf177ff833df608c201f2a626a",
+      "storageLayoutHash": "22d7bc3a26b14ff0b7b86fbdb25db096968a8c7a748f9816d5314108d9a6a7f4",
+      "deployedBytecodeBytes": 5875
+    },
+    "contracts/LogarithmicReverseDutchAuction.sol:LogarithmicReverseDutchAuction": {
+      "abiHash": "11d82663447d3d445ff5dd4ed949f3a2ed9bf27ab73c4ede0b4203255f91c1b1",
+      "runtimeCodeHash": "c1de92af73024c4eade81932f9c06e000fe89b323053f75082ccc01abf332631",
+      "storageLayoutHash": "01f980885f0d74dc00591a36215d67e1d30f1a6742cac0820ce7b36618997365",
+      "deployedBytecodeBytes": 6679
+    },
+    "contracts/ProtocolParameters.sol:ProtocolParameters": {
+      "abiHash": "0950d9bd91387561ca8b662c2f7d3a65e3835c4bb787fa6e321451eaf638f80a",
+      "runtimeCodeHash": "78e6a40ed4c8ee02d2a1c18eeaf88c9d70897a4967aad70debad1eb02a6e6ce3",
+      "storageLayoutHash": "693d6d93f68954056e2b796a7e7f4c35fd78b00d7490f7dcf96cb7356b4457c2",
+      "deployedBytecodeBytes": 608
+    },
+    "contracts/VickreyAuction.sol:VickreyAuction": {
+      "abiHash": "af84a2935bf0e571f58a3bb1298899ed0f3e008d5bb77d602b5e966a43f82d59",
+      "runtimeCodeHash": "aa6564ed8fcb220c2c0b2982989c44279dc423797a382c2cfdc278fe923a267c",
+      "storageLayoutHash": "489f3391829329e97d52f714e00a7259ca784b1500caea4ea4ba4be9f765df8f",
+      "deployedBytecodeBytes": 7374
+    }
+  },
+  "gas": {
+    "methods": {
+      "AllPayAuction.bid.598647f8": 147435,
+      "AllPayAuction.cancelAuction.96b5a755": 99612,
+      "AllPayAuction.claim.379607f5": 97366,
+      "AllPayAuction.createAuction.fe230fa9": 400168,
+      "AllPayAuction.withdraw.2e1a7d4d": 105346,
+      "EnglishAuction.bid.598647f8": 124530,
+      "EnglishAuction.cancelAuction.96b5a755": 99590,
+      "EnglishAuction.claim.379607f5": 97396,
+      "EnglishAuction.createAuction.fe230fa9": 400146,
+      "EnglishAuction.withdraw.2e1a7d4d": 107584,
+      "ExponentialReverseDutchAuction.bid.454a2ab3": 185504,
+      "ExponentialReverseDutchAuction.cancelAuction.96b5a755": 97449,
+      "ExponentialReverseDutchAuction.claim.379607f5": 97333,
+      "ExponentialReverseDutchAuction.createAuction.fe230fa9": 442045,
+      "LinearReverseDutchAuction.bid.454a2ab3": 181985,
+      "LinearReverseDutchAuction.cancelAuction.96b5a755": 97446,
+      "LinearReverseDutchAuction.claim.379607f5": 97330,
+      "LinearReverseDutchAuction.createAuction.af84a5d3": 419609,
+      "LogarithmicReverseDutchAuction.bid.454a2ab3": 186852,
+      "LogarithmicReverseDutchAuction.cancelAuction.96b5a755": 97452,
+      "LogarithmicReverseDutchAuction.claim.379607f5": 97336,
+      "LogarithmicReverseDutchAuction.createAuction.fe230fa9": 466374,
+      "VickreyAuction.cancelAuction.96b5a755": 97195,
+      "VickreyAuction.claim.379607f5": 116983,
+      "VickreyAuction.commitBid.9468cb61": 97367,
+      "VickreyAuction.createAuction.fe230fa9": 446535,
+      "VickreyAuction.revealBid.4d380a0d": 141368,
+      "VickreyAuction.withdraw.2e1a7d4d": 86509
+    },
+    "deployments": {
+      "AllPayAuction": 1444514,
+      "EnglishAuction": 1425428,
+      "ExponentialReverseDutchAuction": 2795042,
+      "LinearReverseDutchAuction": 1373902,
+      "LogarithmicReverseDutchAuction": 1547390,
+      "ProtocolParameters": 258032,
+      "VickreyAuction": 1697849
+    }
+  }
+}

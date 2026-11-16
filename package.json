@@ -1,9 +1,14 @@
 {
   "name": "allpayauction-solidity",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.5.2",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "integrity:check": "node scripts/verify-contract-integrity.js",
+    "integrity:update": "node scripts/verify-contract-integrity.js --update",
     "format": "prettier --write \"**/*.{js,ts,sol}\"",
     "format:check": "prettier --check \"**/*.{js,ts,sol}\""
   },
